@@ -1,0 +1,19 @@
+numpy
+scipy
+pandas
+matplotlib
+nibabel
+# See https://github.com/CarolineLndl/spine_7t_fmri_analysis/issues/115
+# nilearn.plotting.plot_design_matrix error because "ax" is not an option
+nilearn>=0.11
+joblib
+ipython
+pydicom
+dcm2bids
+pydicom
+pybids
+dcm2niix
+seaborn
+nipype
+# pingouin.intraclass_corr output dataframe column names changed in version 0.6.1, which would cause errors if < 0.6.1
+pingouin>=0.6.1

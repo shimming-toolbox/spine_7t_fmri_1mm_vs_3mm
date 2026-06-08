@@ -1,0 +1,35 @@
+# Ignore dcm2niix folder
+code/convert_data/dcm2niix/
+
+#ignore log folder
+log/
+
+#ignore toolboxes folder
+toolboxes/
+
+# Python caches
+__pycache__/
+
+# Jupyter checkpoints
+.ipynb_checkpoints/
+
+# macOS system files
+.DS_Store
+._.DS_Store
+
+
+# Ignore any hidden files in code/ if needed (optional)
+# code/.* 
+code/.nfs*
+code/.nfs*
+
+._*
+
+# Ignore notebooks folder
+notebooks/
+
+#Ignore spine_7T_env.sh
+config/spine_7T_env.sh
+
+# Ignore denoising pipelines for developpement
+code/spm/
