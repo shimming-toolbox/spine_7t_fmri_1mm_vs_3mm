@@ -123,7 +123,8 @@ def epi_full_processing(ID, func_file, tag, manual_centerline, warpT2w_PAM50_fil
                                                      run_name=run_name,
                                                      params=params_moco,
                                                      verbose=verbose,
-                                                     redo=redo)
+                                                     redo=redo,
+                                                     use_dl=False)
 
     print(f'=== Moco : Done  {ID} {tag} {run_name} ===', flush=True)
 

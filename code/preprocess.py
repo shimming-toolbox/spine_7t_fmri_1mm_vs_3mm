@@ -261,7 +261,7 @@ class Preprocess_Sc:
 
         return centerline_f +'.nii.gz', mask_f
 
-    def moco(self,ID=None,i_img=None,mask_img=None,ref_img=None,o_folder=None,params=None,ses_name='',task_name='',run_name="",redo=False,verbose=True):
+    def moco(self,ID=None,i_img=None,mask_img=None,ref_img=None,o_folder=None,params=None,ses_name='',task_name='',run_name="",redo=False,verbose=True,use_dl=False):
 
         """
         This function performs motion correction on functional (fMRI) images using a mask around the spinal cord.
@@ -297,6 +297,8 @@ class Preprocess_Sc:
             Whether to redo the motion correction step (default: False).
         verbose : bool
             Whether to display information and generate quality control plots (default: True).
+        use_dl : bool
+            Whether to use the deep learning model for moco.
 
         Outputs:
         --------
@@ -348,17 +350,35 @@ class Preprocess_Sc:
         # --- Run motion correction --------------------------------------------------------
         if not os.path.exists(moco_file) or redo:
             print(f">>>>> Running motion correction for sub-{ID}...")
-            cmd=f"sct_fmri_moco -i {i_img} -m {mask_img} -param {params} -ofolder {os.path.join(o_folder, self.structure)} -x spline -g 1 -r 1 -qc {self.qc_dir} -qc-subject sub-{ID} -qc-seg {mask_img} -v 0"
+            # Todo: DL option is worse for 3mm, verify for 1mm/SMS
+            if use_dl:
+                os.system("sct_download_data -d moco-dl_models")
+                cmd = f"sct_fmri_moco -i {i_img} -dl -m {mask_img} -ofolder {os.path.join(o_folder, self.structure)} -r 1 -qc {self.qc_dir} -qc-subject sub-{ID} -qc-seg {mask_img} -v 0"
+            else:
+                cmd = f"sct_fmri_moco -i {i_img} -m {mask_img} -param {params} -ofolder {os.path.join(o_folder, self.structure)} -x spline -g 1 -r 1 -qc {self.qc_dir} -qc-subject sub-{ID} -qc-seg {mask_img} -v 0"
+
             if ref_img is not None:
                 cmd += f" -ref {ref_img}"
             os.system(cmd)
+
+            if use_dl:
+                os.rename(moco_file.replace("moco.nii.gz", "mocoDL.nii.gz"), moco_file)
+                os.rename(moco_mean_file.replace("moco_mean.nii.gz", "mocoDL_mean.nii.gz"), moco_mean_file)
 
             # Rename output parameter files for clarity
             for dim in ["x","y"]:
                 os.rename(os.path.join(os.path.dirname(moco_file), f"moco_params_{dim}.nii.gz"), os.path.join(os.path.dirname(moco_file), f"moco_params_{dim}{task_tag}{run_tag}.nii.gz"))
 
             params_tsv = os.path.join(o_folder, 'moco_params.tsv'.split('.')[0] + task_tag + run_tag + '.tsv')
-            os.rename(os.path.join(o_folder, 'moco_params.tsv'), params_tsv)
+            orig_params_tsv = os.path.join(o_folder, 'moco_params.tsv')
+            if not os.path.exists(orig_params_tsv):
+                # TSV file does not output with dl option, so we need to create it from the X and Y parameter files
+                nii_x = nib.load(os.path.join(os.path.dirname(moco_file), f"moco_params_x{task_tag}{run_tag}.nii.gz"))
+                nii_y = nib.load(os.path.join(os.path.dirname(moco_file), f"moco_params_y{task_tag}{run_tag}.nii.gz"))
+                data_moco_params = np.mean(np.sqrt(nii_x.get_fdata()[0, 0] ** 2 + nii_y.get_fdata()[0, 0] ** 2), axis=0)
+                pd.DataFrame({"mean(sqrt(X^2 + Y^2))": data_moco_params}).to_csv(params_tsv, index=False, sep='\t')
+            else:
+                os.rename(os.path.join(o_folder, 'moco_params.tsv'), params_tsv)
 
             # # Re-run moco with nearest neighbor interpolation for tSNR computation
             # Commented out until this is resolved: https://github.com/spinalcordtoolbox/spinalcordtoolbox/issues/5157
