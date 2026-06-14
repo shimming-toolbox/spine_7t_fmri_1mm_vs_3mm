@@ -262,6 +262,69 @@ def compute_tsnr_map(fname_file, ofolder, redo, first_n_vols=None, smooth=False)
     return fname_tsnr
 
 
+def average_slices_img(i_img=None, o_img=None, n_slices_avg=3, axis=2, redo=False, verbose=False):
+    """
+    Average groups of `n_slices_avg` adjacent slices along `axis` of a 3D/4D NIfTI,
+    producing a lower-resolution volume (e.g. collapsing 1mm slices into 3mm-thick
+    slices). The affine and pixdim are adjusted so the output geometry matches what
+    a native acquisition with `n_slices_avg`x thicker slices would have:
+        new_origin = old_origin + (n_slices_avg-1)/2 * affine[:3, axis]
+        new_affine[:3, axis] = n_slices_avg * affine[:3, axis]
+        pixdim[axis] *= n_slices_avg
+
+    Attributes:
+    ----------
+    i_img: input filename of the NIfTI image to average
+    o_img: output filename (str, default: None, the input filename will be used as a base
+           with "_avg{n_slices_avg}.nii.gz" appended)
+    n_slices_avg: number of adjacent slices to average together (default: 3)
+    axis: voxel axis along which slices are stacked (default: 2, the 3rd dimension)
+    redo: overwrite existing output file if True
+
+    Returns:
+        str: filename of the averaged NIfTI file
+    """
+    if i_img is None:
+        raise ValueError("Please provide the input filename, ex: average_slices_img(i_img='/mydir/sub-1_filename.nii.gz')")
+
+    if o_img is None:
+        o_img = i_img.split(".")[0] + f"_avg{n_slices_avg}.nii.gz"
+
+    if not os.path.exists(o_img) or redo:
+        nii = nib.load(i_img)
+        data = nii.get_fdata()
+
+        n_slices = data.shape[axis]
+        if n_slices % n_slices_avg != 0:
+            raise ValueError(f"Cannot average {i_img}: shape[{axis}]={n_slices} is not divisible by n_slices_avg={n_slices_avg}")
+
+        # Average groups of n_slices_avg adjacent slices along axis
+        data = np.moveaxis(data, axis, 0)
+        new_shape = (n_slices // n_slices_avg, n_slices_avg) + data.shape[1:]
+        data = data.reshape(new_shape).mean(axis=1)
+        data = np.moveaxis(data, 0, axis).astype(np.float32)
+
+        # Adjust affine and header so geometry matches a native thicker-slice acquisition
+        affine = nii.affine.copy()
+        affine[:3, 3] += (n_slices_avg - 1) / 2 * affine[:3, axis]
+        affine[:3, axis] *= n_slices_avg
+
+        header = nii.header.copy()
+        header.set_data_dtype(np.float32)
+        zooms = list(header.get_zooms())
+        zooms[axis] *= n_slices_avg
+        header.set_zooms(zooms)
+
+        nii_avg = nib.Nifti1Image(data, affine=affine, header=header)
+        nii_avg.to_filename(o_img)
+
+    if verbose:
+        print("Done : check the outputs files in fsleyes by copy and past:")
+        print("fsleyes " + o_img)
+
+    return o_img
+
+
 def extract_mean_within_mask(fname_file, fname_mask):
     """
     Attributes:
