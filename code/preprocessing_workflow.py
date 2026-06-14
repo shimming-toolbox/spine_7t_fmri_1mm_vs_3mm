@@ -187,9 +187,15 @@ def epi_avg_slices_moco(ID, source_tag, tag, n_slices_avg, redo, verbose):
     for source_moco_f in source_moco_files:
         match = re.search(r"_?(run-\d+)", source_moco_f)
         run_name = match.group(1) if match else ""
+        run_tag = f"_{run_name}" if run_name else ""
+
+        # De-jitter the per-slice AP offset (see issue #8) before averaging
+        moco_params_y_f = os.path.join(source_moco_dir, f"moco_params_y_{source_tag}{run_tag}.nii.gz")
+        destriped_f = os.path.join(moco_dir, os.path.basename(source_moco_f).replace(source_tag, tag).replace("_moco.nii.gz", "_moco_destriped.nii.gz"))
+        destriped_f = utils.destripe_slices_img(i_img=source_moco_f, moco_params_img=moco_params_y_f, o_img=destriped_f, redo=redo, verbose=verbose)
 
         moco_f = os.path.join(moco_dir, os.path.basename(source_moco_f).replace(source_tag, tag))
-        moco_f = utils.average_slices_img(i_img=source_moco_f, o_img=moco_f, n_slices_avg=n_slices_avg, redo=redo, verbose=verbose)
+        moco_f = utils.average_slices_img(i_img=destriped_f, o_img=moco_f, n_slices_avg=n_slices_avg, redo=redo, verbose=verbose)
 
         moco_mean_f = os.path.join(moco_dir, os.path.basename(moco_f).split(".")[0] + "_mean.nii.gz")
         moco_mean_f = utils.tmean_img(ID=ID, i_img=moco_f, o_img=moco_mean_f, redo=redo, verbose=verbose)
