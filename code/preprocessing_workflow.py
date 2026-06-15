@@ -172,6 +172,99 @@ def epi_full_processing(ID, func_file, tag, manual_centerline, warpT2w_PAM50_fil
     copy_csf_segmentation_from_ref_tag(ID, tag, tag, manual_dir, preprocessing_dir)
     copy_warping_fields_from_ref_tag(ID, tag, tag, preprocessing_dir)
 
+
+def epi_avg_slices_moco(ID, source_tag, tag, n_slices_avg, redo, verbose):
+    # ------------------------------------------------------------------
+    # ------ Average n_slices_avg adjacent slices of the motion-corrected data
+    # ------------------------------------------------------------------
+    source_moco_dir = os.path.join(preprocessing_dir.format(ID), "func", source_tag, "sct_fmri_moco")
+    moco_dir = os.path.join(preprocessing_dir.format(ID), "func", tag, "sct_fmri_moco")
+    os.makedirs(moco_dir, exist_ok=True)
+
+    source_moco_files = sorted(glob.glob(os.path.join(source_moco_dir, f"sub-{ID}_{source_tag}_*bold_moco.nii.gz")))
+
+    outputs = []
+    for source_moco_f in source_moco_files:
+        match = re.search(r"_?(run-\d+)", source_moco_f)
+        run_name = match.group(1) if match else ""
+        run_tag = f"_{run_name}" if run_name else ""
+
+        # De-jitter the per-slice AP offset (see issue #8) before averaging
+        moco_params_y_f = os.path.join(source_moco_dir, f"moco_params_y_{source_tag}{run_tag}.nii.gz")
+        destriped_f = os.path.join(moco_dir, os.path.basename(source_moco_f).replace(source_tag, tag).replace("_moco.nii.gz", "_moco_destriped.nii.gz"))
+        destriped_f = utils.destripe_slices_img(i_img=source_moco_f, moco_params_img=moco_params_y_f, o_img=destriped_f, redo=redo, verbose=verbose)
+
+        moco_f = os.path.join(moco_dir, os.path.basename(source_moco_f).replace(source_tag, tag))
+        moco_f = utils.average_slices_img(i_img=destriped_f, o_img=moco_f, n_slices_avg=n_slices_avg, redo=redo, verbose=verbose)
+
+        moco_mean_f = os.path.join(moco_dir, os.path.basename(moco_f).split(".")[0] + "_mean.nii.gz")
+        moco_mean_f = utils.tmean_img(ID=ID, i_img=moco_f, o_img=moco_mean_f, redo=redo, verbose=verbose)
+
+        outputs.append((moco_f, moco_mean_f, run_name))
+
+    print(f'=== Slice averaging (1mm -> {n_slices_avg}x) : Done  {ID} {tag} ===', flush=True)
+
+    return outputs
+
+
+def epi_avg_slices_processing(ID, source_tag, tag, n_slices_avg, warpT2w_PAM50_files, redo, verbose):
+    for moco_f, moco_mean_f, run_name in epi_avg_slices_moco(ID, source_tag, tag, n_slices_avg, redo, verbose):
+        # ------------------------------------------------------------------
+        # ------ Create mask around the cord for QC of the segmentation
+        # ------------------------------------------------------------------
+        ctrl_sc_file, mask_sc_file = preprocess_Sc.moco_mask(ID=ID,
+                                                             i_img=moco_mean_f,
+                                                             radius_size=25,
+                                                             task_name=tag,
+                                                             manual=manual_centerline,
+                                                             redo_ctrl=redo,
+                                                             redo_mask=redo,
+                                                             verbose=verbose)
+
+        # ------------------------------------------------------------------
+        # ------ Run func cord and CSF segmentation
+        # ------------------------------------------------------------------
+        # Cord segmentation
+        seg_func_sc_file = preprocess_Sc.segmentation(ID=ID,
+                                                      i_img=moco_mean_f,
+                                                      task_name=tag,
+                                                      img_type="func",
+                                                      mask_qc=mask_sc_file,
+                                                      redo=redo,
+                                                      redo_qc=redo,  # should be true if you have done manual correction
+                                                      verbose=verbose)
+        # csf segmentation
+        preprocess_Sc.segmentation(ID=ID,
+                                   i_img=moco_mean_f,
+                                   task_name=tag, contrast_anat="t2s",
+                                   img_type="func",
+                                   tissue="csf",
+                                   redo_qc=redo,  # should be true if you have done manual correction
+                                   redo=redo,
+                                   verbose=verbose)
+
+        print(f'=== Func segmentation : Done  {ID} {tag} {run_name} ===', flush=True)
+
+        # ------------------------------------------------------------------
+        # ------ Registration in PAM50
+        # ------------------------------------------------------------------
+        param = "step=1,type=seg,algo=centermass:step=2,type=seg,algo=bsplinesyn,metric=CC,iter=10,smooth=1,slicewise=1"
+        preprocess_Sc.coreg_img2PAM50(ID=ID,
+                                       i_img=moco_mean_f,
+                                       i_seg=seg_func_sc_file,
+                                       task_name=tag,
+                                       run_name=run_name,
+                                       initwarp=warpT2w_PAM50_files[0],
+                                       initwarpinv=warpT2w_PAM50_files[1],
+                                       param=param,
+                                       redo=redo,
+                                       verbose=verbose)
+
+        # Copy the segmentation, csf segmentation and warping field to where the final files are expected to be
+        copy_segmentation_from_ref_tag(ID, tag, tag, manual_dir, preprocessing_dir)
+        copy_csf_segmentation_from_ref_tag(ID, tag, tag, manual_dir, preprocessing_dir)
+        copy_warping_fields_from_ref_tag(ID, tag, tag, preprocessing_dir)
+
 #------------------------------------------------------------------
 #------ Preprocessing
 #------------------------------------------------------------------
@@ -320,6 +413,39 @@ for ID_nb, ID in enumerate(IDs):
                     copy_warping_fields_from_ref_tag(ID, tag, ref_tag, preprocessing_dir)
 
                 print(f'=== Func registration : Done  {ID} {tag} {run_name} ===')
+
+    #---------------Derived (slice-averaged) acquisitions ---------------------------------
+    for derived_acq_name, derived_info in config.get("derived_acq", {}).items():
+        source_acq = derived_info["source_acq"]
+        n_slices_avg = derived_info["n_slices_avg"]
+
+        for task_name in config["design_exp"]["task_names"]:
+            source_tag = "task-" + task_name + "_acq-" + source_acq
+            tag = "task-" + task_name + "_acq-" + derived_acq_name
+
+            source_moco_dir = os.path.join(preprocessing_dir.format(ID), "func", source_tag, "sct_fmri_moco")
+            if not glob.glob(os.path.join(source_moco_dir, f"sub-{ID}_{source_tag}_*bold_moco.nii.gz")):
+                print(f'No moco output found for {source_tag}, skipping derived acquisition {tag}.', flush=True)
+                continue
+
+            os.makedirs(os.path.join(preprocessing_dir.format(ID), "func", tag), exist_ok=True)
+
+            if task_name == 'motor':
+                epi_avg_slices_processing(ID, source_tag, tag, n_slices_avg, warpT2w_PAM50_files, redo, verbose)
+            else:
+                # For other tasks (eg: rest), co-register to PAM50 using the motor task's derived
+                # acquisition as a reference, following the same pattern as the native acquisitions.
+                ref_tag = "task-motor_acq-" + derived_acq_name
+                ref_seg = os.path.join(preprocessing_dir.format(ID), "func", ref_tag, f"sub-{ID}_{ref_tag}_bold_moco_mean_seg.nii.gz")
+                if not os.path.exists(ref_seg):
+                    print(f'No reference outputs found for {ref_tag}, skipping derived acquisition {tag}.', flush=True)
+                    continue
+                epi_avg_slices_moco(ID, source_tag, tag, n_slices_avg, redo, verbose)
+                copy_segmentation_from_ref_tag(ID, tag, ref_tag, manual_dir, preprocessing_dir)
+                copy_csf_segmentation_from_ref_tag(ID, tag, ref_tag, manual_dir, preprocessing_dir)
+                copy_warping_fields_from_ref_tag(ID, tag, ref_tag, preprocessing_dir)
+
+            print(f'=== Slice-averaged processing : Done  {ID} {tag} ===', flush=True)
 
     print(f'=== Preprocessing done for : {ID} ===', flush=True)
     print("=========================================", flush=True)

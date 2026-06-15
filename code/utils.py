@@ -262,6 +262,149 @@ def compute_tsnr_map(fname_file, ofolder, redo, first_n_vols=None, smooth=False)
     return fname_tsnr
 
 
+def average_slices_img(i_img=None, o_img=None, n_slices_avg=3, axis=2, redo=False, verbose=False):
+    """
+    Average groups of `n_slices_avg` adjacent slices along `axis` of a 3D/4D NIfTI,
+    producing a lower-resolution volume (e.g. collapsing 1mm slices into 3mm-thick
+    slices). The affine and pixdim are adjusted so the output geometry matches what
+    a native acquisition with `n_slices_avg`x thicker slices would have:
+        new_origin = old_origin + (n_slices_avg-1)/2 * affine[:3, axis]
+        new_affine[:3, axis] = n_slices_avg * affine[:3, axis]
+        pixdim[axis] *= n_slices_avg
+
+    Attributes:
+    ----------
+    i_img: input filename of the NIfTI image to average
+    o_img: output filename (str, default: None, the input filename will be used as a base
+           with "_avg{n_slices_avg}.nii.gz" appended)
+    n_slices_avg: number of adjacent slices to average together (default: 3)
+    axis: voxel axis along which slices are stacked (default: 2, the 3rd dimension)
+    redo: overwrite existing output file if True
+
+    Returns:
+        str: filename of the averaged NIfTI file
+    """
+    if i_img is None:
+        raise ValueError("Please provide the input filename, ex: average_slices_img(i_img='/mydir/sub-1_filename.nii.gz')")
+
+    if o_img is None:
+        o_img = i_img.split(".")[0] + f"_avg{n_slices_avg}.nii.gz"
+
+    if not os.path.exists(o_img) or redo:
+        nii = nib.load(i_img)
+        data = nii.get_fdata()
+
+        n_slices = data.shape[axis]
+        if n_slices % n_slices_avg != 0:
+            raise ValueError(f"Cannot average {i_img}: shape[{axis}]={n_slices} is not divisible by n_slices_avg={n_slices_avg}")
+
+        # Average groups of n_slices_avg adjacent slices along axis
+        data = np.moveaxis(data, axis, 0)
+        new_shape = (n_slices // n_slices_avg, n_slices_avg) + data.shape[1:]
+        data = data.reshape(new_shape).mean(axis=1)
+        data = np.moveaxis(data, 0, axis).astype(np.float32)
+
+        # Adjust affine and header so geometry matches a native thicker-slice acquisition
+        affine = nii.affine.copy()
+        affine[:3, 3] += (n_slices_avg - 1) / 2 * affine[:3, axis]
+        affine[:3, axis] *= n_slices_avg
+
+        header = nii.header.copy()
+        header.set_data_dtype(np.float32)
+        zooms = list(header.get_zooms())
+        zooms[axis] *= n_slices_avg
+        header.set_zooms(zooms)
+
+        nii_avg = nib.Nifti1Image(data, affine=affine, header=header)
+        nii_avg.to_filename(o_img)
+
+    if verbose:
+        print("Done : check the outputs files in fsleyes by copy and past:")
+        print("fsleyes " + o_img)
+
+    return o_img
+
+
+def destripe_slices_img(i_img=None, moco_params_img=None, o_img=None, axis_shift=1, axis_slice=2, redo=False, verbose=False):
+    """
+    Remove a period-2 (even/odd slice index) alternating offset along `axis_shift`
+    (default: axis=1, the phase-encoding/AP direction) from a 4D motion-corrected
+    image, estimated from the per-slice, per-volume translations in
+    `moco_params_img` (e.g. moco_params_y_*.nii.gz, values in mm).
+
+    For each slice z along `axis_slice` (default: axis=2):
+      - off[z]   = temporal mean of moco_params_img[z, :]  (mm)
+      - trend[z] = (2*off[z] + off[z-1] + off[z+1]) / 4   (binomial smoothing,
+                    edges via reflect padding)
+      - jitter[z] = off[z] - trend[z]                      (period-2 residual)
+    Each slice's data (all volumes) is then shifted by `-jitter[z]` mm
+    (converted to voxels via pixdim[axis_shift]) along `axis_shift`, using
+    cubic-spline interpolation (scipy.ndimage.shift, order=3, mode='nearest').
+
+    Attributes:
+    ----------
+    i_img: input filename of the 4D motion-corrected NIfTI image
+    moco_params_img: filename of the moco_params_y NIfTI image (shape (1,1,n_slices,n_vols))
+    o_img: output filename (str, default: None, the input filename will be used as a base
+           with "_destriped.nii.gz" appended)
+    axis_shift: voxel axis along which the corrective shift is applied (default: 1)
+    axis_slice: voxel axis along which slices are stacked (default: 2)
+    redo: overwrite existing output file if True
+
+    Returns:
+        str: filename of the destriped NIfTI file
+    """
+    if i_img is None:
+        raise ValueError("Please provide the input filename, ex: destripe_slices_img(i_img='/mydir/sub-1_filename.nii.gz')")
+
+    if moco_params_img is None:
+        raise ValueError("Please provide the moco_params_y filename, ex: destripe_slices_img(moco_params_img='/mydir/moco_params_y_....nii.gz')")
+
+    if o_img is None:
+        o_img = i_img.split(".")[0] + "_destriped.nii.gz"
+
+    if not os.path.exists(o_img) or redo:
+        from scipy.ndimage import shift as ndi_shift
+
+        nii = nib.load(i_img)
+        data = nii.get_fdata()
+
+        moco_y = nib.load(moco_params_img).get_fdata().squeeze()
+        if moco_y.shape[0] != data.shape[axis_slice]:
+            raise ValueError(f"Number of slices in {moco_params_img} ({moco_y.shape[0]}) does not match shape[{axis_slice}]={data.shape[axis_slice]} of {i_img}")
+
+        # Estimate per-slice systematic offset, separate smooth trend from period-2 jitter
+        off = moco_y.mean(axis=1)
+        padded = np.pad(off, 1, mode='reflect')
+        trend = (2 * off + padded[:-2] + padded[2:]) / 4
+        jitter = off - trend
+
+        # Convert jitter (mm) to a corrective shift (voxels) along axis_shift
+        pixdim = nii.header.get_zooms()[axis_shift]
+        shift_vox = -jitter / pixdim
+
+        # Apply per-slice shift along axis_shift to all volumes
+        data = np.moveaxis(data, axis_slice, 0)
+        axis_shift_adj = axis_shift if axis_shift < axis_slice else axis_shift - 1
+        for z in range(data.shape[0]):
+            shift_vec = [0] * data[z].ndim
+            shift_vec[axis_shift_adj] = shift_vox[z]
+            data[z] = ndi_shift(data[z], shift=shift_vec, order=3, mode='nearest')
+        data = np.moveaxis(data, 0, axis_slice).astype(np.float32)
+
+        header = nii.header.copy()
+        header.set_data_dtype(np.float32)
+
+        nii_destriped = nib.Nifti1Image(data, affine=nii.affine, header=header)
+        nii_destriped.to_filename(o_img)
+
+    if verbose:
+        print("Done : check the outputs files in fsleyes by copy and past:")
+        print("fsleyes " + o_img)
+
+    return o_img
+
+
 def extract_mean_within_mask(fname_file, fname_mask):
     """
     Attributes:
