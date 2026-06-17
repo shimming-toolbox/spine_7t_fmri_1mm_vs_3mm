@@ -214,7 +214,7 @@ def epi_avg_slices_processing(ID, source_tag, tag, n_slices_avg, warpT2w_PAM50_f
         # ------------------------------------------------------------------
         ctrl_sc_file, mask_sc_file = preprocess_Sc.moco_mask(ID=ID,
                                                              i_img=moco_mean_f,
-                                                             radius_size=25,
+                                                             mask_size_mm=35,
                                                              task_name=tag,
                                                              manual=manual_centerline,
                                                              redo_ctrl=redo,
