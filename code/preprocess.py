@@ -146,7 +146,7 @@ class Preprocess_Sc:
             self.structure = "" # no structure subfolder if only one structure is specified
 
 
-    def moco_mask(self,ID=None,i_img=None,o_folder=None, radius_size=15,ses_name='',task_name='', tag='',manual=False,redo_ctrl=False,redo_mask=False,verbose=True):
+    def moco_mask(self,ID=None,i_img=None,o_folder=None, mask_size_mm=35,ses_name='',task_name='', tag='',manual=False,redo_ctrl=False,redo_mask=False,verbose=True):
 
         """
         This function creates a mask around a spinal cord centerline.
@@ -164,8 +164,8 @@ class Preprocess_Sc:
             Input filename of the functional image (default: None; an error will be raised if not provided).
         o_folder : str
             Output folder name (default: None; if not provided, the input folder will be used).
-        radius_size : int
-            Diameter of the surrounding mask in voxels (default: 15).
+        mask_size_mm : int
+            Diameter of the surrounding mask in mm (default: 35).
         ses_name : str
             Session name, if applicable (should include the 'ses-' prefix in BIDS format).
         task_name : str
@@ -223,7 +223,7 @@ class Preprocess_Sc:
         # --- Create mask around centerline ------------------------------------------------
         if not os.path.exists(mask_f) or redo_mask:
             print(f"Create a mask for sub-{ID}")
-            cmd_mask=f"sct_create_mask -i {i_img} -p centerline,{centerline_f}.nii.gz -size {radius_size} -o {mask_f} -v 0"
+            cmd_mask=f"sct_create_mask -i {i_img} -p centerline,{centerline_f}.nii.gz -size {mask_size_mm}mm -o {mask_f} -v 0"
             os.system(cmd_mask)
 
         # --- Validate mask and image dimensions ------------------------------------------
