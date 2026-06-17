@@ -124,7 +124,7 @@ def epi_full_processing(ID, func_file, tag, manual_centerline, warpT2w_PAM50_fil
                                                      params=params_moco,
                                                      verbose=verbose,
                                                      redo=redo,
-                                                     use_dl=False)
+                                                     use_dl=True)
 
     print(f'=== Moco : Done  {ID} {tag} {run_name} ===', flush=True)
 
@@ -310,7 +310,8 @@ for ID_nb, ID in enumerate(IDs):
                                                                 run_name=run_name,
                                                                 params=params_moco,
                                                                 verbose=verbose,
-                                                                redo=redo)
+                                                                redo=redo,
+                                                                use_dl=True)
 
                     # Copy segmentation and registration files from the motor task to the other tasks, since we are using
                     # the same reference for moco and registration to PAM50. This is to avoid having to redo segmentation
