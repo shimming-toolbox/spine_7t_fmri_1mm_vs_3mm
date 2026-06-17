@@ -103,7 +103,7 @@ def epi_full_processing(ID, func_file, tag, manual_centerline, warpT2w_PAM50_fil
     mean_func_f = utils.tmean_img(ID=ID, i_img=func_file, o_img=o_img, verbose=False)
     ctrl_sc_file, mask_sc_file = preprocess_Sc.moco_mask(ID=ID,
                                                          i_img=mean_func_f,
-                                                         radius_size=25,
+                                                         mask_size_mm=35,
                                                          task_name=tag,
                                                          manual=manual_centerline,
                                                          redo_ctrl=redo,
