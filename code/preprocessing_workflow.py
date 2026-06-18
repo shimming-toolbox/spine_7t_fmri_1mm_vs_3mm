@@ -295,7 +295,6 @@ for ID_nb, ID in enumerate(IDs):
     seg_anat_sc_file = preprocess_Sc.segmentation(ID=ID,
                                                 i_img=raw_anat,
                                                 img_type="anat",
-                                                contrast_anat="t2",
                                                 redo=redo,
                                                 redo_qc=redo, # should be true if you have done manual correction
                                                 verbose=verbose)
