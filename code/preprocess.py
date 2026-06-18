@@ -538,7 +538,7 @@ class Preprocess_Sc:
                     os.system(cmd_fslmaths) # substract cord and gm segmentation to obtain wm
                     cmd=f"fslmaths {o_img} -thr 0 {o_img}" # threshold the mask at 0
                 else:
-                    cmd=f"sct_deepseg spinalcord -i {i_img} -c {contrast_anat} -thr 0.01 -o {o_img} -qc {self.qc_dir} -qc-subject sub-{ID} -qc-contrast {task_name or 'anat'} -v 0" # segmentation
+                    cmd=f"sct_deepseg spinalcord -i {i_img} -o {o_img} -qc {self.qc_dir} -qc-subject sub-{ID} -qc-contrast {task_name or 'anat'} -v 0" # segmentation
 
             os.system(cmd) # run the process
 
