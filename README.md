@@ -256,25 +256,3 @@ Should be run after preprocessing and denoising.
 bash "${PATH_CODE}/code/run_all_processing.sh" --path-data "${PATH_DATA}" --path-code "${PATH_CODE}" --ids "${IDs[@]}" --tasks motor --firstlevel
 
 ```
-
-### 2.4 Second-level Analysis 📊
-
-Should be run after first-level analysis. Performs group-level statistics and reproducibility analyses.
-
-#### Description of the second-level analysis
-- **I. Compute average tSNR across participants:** normalizes individual tSNR maps to PAM50 space and computes a group average for each acquisition condition.
-- **II. Compute average framewise displacement (FD):** extracts and compares motion across conditions.
-- **III. Run second-level GLM:** performs a non-parametric permutation test (10 000 permutations) on the first-level z-maps to produce group activation maps in PAM50 space. Applies cluster-level correction at two thresholds (p < 0.01 and p < 0.001).
-- **IV. Extract metrics:** extracts the number of activated voxels and their distribution for each condition.
-- **V. Intraclass correlation coefficient (ICC):** quantifies test-retest reproducibility between shimSlice run-01 and run-02, and between shimBase and shimSlice conditions.
-
-#### Run second-level analysis
-
-```bash
-bash "${PATH_CODE}/code/run_all_processing.sh" --path-data "${PATH_DATA}" --path-code "${PATH_CODE}" --ids "${IDs[@]}" --tasks motor --secondlevel
-```
-
-### 2.5 Figure generation 🖼️
-
-> [!NOTE]
-> A dedicated `figures_workflow.py` script is planned (see [issue #21](https://github.com/shimming-toolbox/spine_7t_fmri_1mm_vs_3mm/issues/21)). Currently, figures are generated automatically at the end of the first-level and second-level workflows.
