@@ -12,7 +12,9 @@
             "acq_names":["shimBase+3mm","shimSlice+3mm","shimBase+1mm+sms2","shimSlice+1mm+sms2"]},
 
 "derived_acq":{"shimBase+1mm+sms2+avg3mm":{"source_acq":"shimBase+1mm+sms2","n_slices_avg":3},
-               "shimSlice+1mm+sms2+avg3mm":{"source_acq":"shimSlice+1mm+sms2","n_slices_avg":3}},
+               "shimSlice+1mm+sms2+avg3mm":{"source_acq":"shimSlice+1mm+sms2","n_slices_avg":3},
+               "shimBase+1mm+sms2+smooth3mm":{"source_acq":"shimBase+1mm+sms2","smooth_width":3},
+               "shimSlice+1mm+sms2+smooth3mm":{"source_acq":"shimSlice+1mm+sms2","smooth_width":3}},
 
 "preprocess_dir":{"main_dir":"derivatives/processing/preprocessing/sub-{}/",
                   "QC_dir":"derivatives/processing/preprocessing/QC/",

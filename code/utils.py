@@ -325,6 +325,48 @@ def average_slices_img(i_img=None, o_img=None, n_slices_avg=3, axis=2, redo=Fals
     return o_img
 
 
+def smooth_slices_img(i_img=None, o_img=None, smooth_width=3, axis=2, redo=False, verbose=False):
+    """
+    Apply a sliding-window (box) average of width `smooth_width` along `axis` of a
+    3D/4D NIfTI, keeping the original geometry (same number of slices, same affine).
+    Each output slice i = mean of slices [i - w//2 ... i + w//2] (reflect-padded).
+
+    Unlike average_slices_img, this does NOT downsample: it is a spatial low-pass
+    filter that reduces high-frequency noise along z while preserving 1mm sampling.
+
+    Attributes:
+    ----------
+    i_img: input filename of the NIfTI image to smooth
+    o_img: output filename (default: input basename with "_smooth{smooth_width}" appended)
+    smooth_width: box kernel width in slices (default: 3)
+    axis: voxel axis along which to smooth (default: 2)
+    redo: overwrite existing output file if True
+
+    Returns:
+        str: filename of the smoothed NIfTI file
+    """
+    from scipy.ndimage import uniform_filter1d
+
+    if i_img is None:
+        raise ValueError("Please provide the input filename.")
+
+    if o_img is None:
+        o_img = i_img.split(".")[0] + f"_smooth{smooth_width}.nii.gz"
+
+    if not os.path.exists(o_img) or redo:
+        nii = nib.load(i_img)
+        data = nii.get_fdata().astype(np.float32)
+        data = uniform_filter1d(data, size=smooth_width, axis=axis, mode='reflect').astype(np.float32)
+        nii_out = nib.Nifti1Image(data, affine=nii.affine, header=nii.header)
+        nii_out.to_filename(o_img)
+
+    if verbose:
+        print("Done : check the outputs files in fsleyes by copy and past:")
+        print("fsleyes " + o_img)
+
+    return o_img
+
+
 def destripe_slices_img(i_img=None, moco_params_img=None, o_img=None, axis_shift=1, axis_slice=2, redo=False, verbose=False):
     """
     Remove a period-2 (even/odd slice index) alternating offset along `axis_shift`
