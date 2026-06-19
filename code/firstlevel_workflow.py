@@ -137,7 +137,16 @@ for ID_nb, ID in enumerate(IDs):
                 else:
                     run_name=""
 
-                denoised_fmri=glob.glob(os.path.join(denoising_dir.format(ID ), tag, config["denoising"]["denoised_dir"],"*"+run_name+"*_nostd_s.nii.gz"))[0]
+                denoised_candidates = glob.glob(os.path.join(denoising_dir.format(ID), tag, config["denoising"]["denoised_dir"],"*"+run_name+"*_nostd_s.nii.gz"))
+                if denoised_candidates:
+                    denoised_fmri = denoised_candidates[0]
+                else:
+                    moco_candidates = glob.glob(os.path.join(preprocessing_dir.format(ID), 'func', tag, 'sct_fmri_moco', f'sub-{ID}_{tag}_bold_moco.nii.gz'))
+                    if not moco_candidates:
+                        print(f"WARNING: No denoised or moco file found for sub-{ID} {tag}, skipping.", flush=True)
+                        continue
+                    denoised_fmri = moco_candidates[0]
+                    print(f"INFO: No denoised file found for sub-{ID} {tag}, falling back to moco output.", flush=True)
                 cord_seg_file = glob.glob(os.path.join(preprocessing_dir.format(ID), 'func',tag, config["preprocess_f"]["func_seg"].format(ID,tag,"")))[0]
                 warp_file = os.path.join(preprocessing_dir.format(ID), 'func', tag, f"sub-{ID}_{tag}_from-func_to_PAM50_mode-image_xfm.nii.gz")
 

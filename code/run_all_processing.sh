@@ -81,8 +81,6 @@ if [ "${RUN_PREPROSS}" = true ]; then
     echo "Finished preprocessing!"
 fi
 
-exit
-
 # --------------------------
 # Run denoising
 # --------------------------
