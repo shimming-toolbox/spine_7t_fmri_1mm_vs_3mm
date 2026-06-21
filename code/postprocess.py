@@ -746,12 +746,8 @@ class EpiComparison:
         print("=== Create EPI comparison figure ===", flush=True)
 
         for ID in self.IDs:
-            # Figure looks better if we use more volumes (task-motor has more volumes than rest)
-            # try:
-            #     create_mocomean_same_vols(ID, "rest", self.config, self.path_fig_data, self.redo)
-            # except RuntimeError as e:
-            #     create_mocomean_same_vols(ID, "motor", self.config, self.path_fig_data, self.redo)
-            create_mocomean_same_vols(ID, "motor", self.config, self.path_fig_data, self.redo)
+            # shimBase+3mm was only acquired during the rest task (not motor), so use rest here
+            create_mocomean_same_vols(ID, "rest", self.config, self.path_fig_data, self.redo)
 
         ### Create 1 figure per subject, showing moco mean in native space between baseline and slicewise shim
         if show_avg:
