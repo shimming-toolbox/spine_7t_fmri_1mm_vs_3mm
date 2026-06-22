@@ -198,8 +198,8 @@ for cluster_corr in [0.01,0.001]:
                     if glm_matches:
                         i_fnames.append(glm_matches[0])
 
-                if not i_fnames:
-                    print(f"WARNING: No first-level files for {tag}, skipping second-level GLM.", flush=True)
+                if len(i_fnames) < 2:
+                    print(f"WARNING: Only {len(i_fnames)} subject(s) for {tag} — need at least 2 for second-level GLM, skipping.", flush=True)
                     continue
 
                 z_map_file = glm_ana.run_second_level_glm(i_fnames=i_fnames,
