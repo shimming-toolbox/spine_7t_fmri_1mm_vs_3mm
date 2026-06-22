@@ -818,6 +818,10 @@ class EpiComparison:
             # vmin = vmin + 0.1 * delta
             vmax = vmax - 0.2 * delta
 
+            frame_labels = ["shimBase (2nd order)", "shimSlice (f0xyz)"]
+            title_text = fig.text(0.01, 0.85, frame_labels[0], color='white', fontsize=4,
+                                  fontweight='bold', ha='left', va='top')
+
             ims = []
             for idx, slice_idx in enumerate(range(n_slices - 1, -1, -show_slice_factor)):
                 com_baseline = center_of_mass(mask_baseline[:, :, slice_idx])
@@ -843,6 +847,7 @@ class EpiComparison:
                                        ha='center', va='center', transform=axs[idx].transAxes)
 
             def update(i):
+                title_text.set_text(frame_labels[i % 2])
                 for idx, slice_idx in enumerate(range(n_slices - 1, -1, -show_slice_factor)):
                     if i % 2 == 1:
                         com_slicewise = center_of_mass(mask_slicewise[:, :, slice_idx])
@@ -862,7 +867,7 @@ class EpiComparison:
                         ims[idx].set_data(cropped_baseline.T)
 
                 return ims
-            ani = animation.FuncAnimation(fig, update, frames=2, interval=2000, blit=False, repeat=True)
+            ani = animation.FuncAnimation(fig, update, frames=2, interval=1000, blit=False, repeat=True)
             ani.save(fname_gif, dpi=2000, writer="ffmpeg")
 
     def _select_moco_mean_same_vols(self, ID, acq_name):
@@ -955,7 +960,7 @@ class EpiComparison:
             # 3mm native: show every 2nd slice (~14 panels for 28 slices)
             # avg3mm derived (84 slices): show every 6th slice (~14 panels) for visual parity
             factor_3mm = 2
-            factor_avg = 6
+            factor_avg = 2
 
             n_part = len(self.IDs)
             if n_part > 5:
@@ -1117,7 +1122,7 @@ class EpiComparison:
             name_slice_avg = self.name_slice_avg
 
             factor_3mm = 2
-            factor_avg = 6
+            factor_avg = 2
 
             task_3mm = self._get_task_of_moco_mean_same_vols(ID, name_baseline)
             fname_baseline = self._select_moco_mean_same_vols(ID, name_baseline)
