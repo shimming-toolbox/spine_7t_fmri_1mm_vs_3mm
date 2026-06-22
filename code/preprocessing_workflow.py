@@ -523,15 +523,27 @@ for ID_nb, ID in enumerate(IDs):
                 ref_tag = "task-motor_acq-" + derived_acq_name
                 ref_seg = os.path.join(preprocessing_dir.format(ID), "func", ref_tag, f"sub-{ID}_{ref_tag}_bold_moco_mean_seg.nii.gz")
                 if not os.path.exists(ref_seg):
-                    print(f'No reference outputs found for {ref_tag}, skipping derived acquisition {tag}.', flush=True)
-                    continue
-                if n_slices_avg is not None:
-                    epi_avg_slices_moco(ID, source_tag, tag, n_slices_avg, redo, verbose)
+                    # No motor reference — if the source acq itself was never acquired in motor,
+                    # this is a rest-only acquisition: run full processing without a motor reference.
+                    motor_source_tag = "task-motor_acq-" + source_acq
+                    motor_source_moco_dir = os.path.join(preprocessing_dir.format(ID), "func", motor_source_tag, "sct_fmri_moco")
+                    if glob.glob(os.path.join(motor_source_moco_dir, f"sub-{ID}_{motor_source_tag}_*bold_moco.nii.gz")):
+                        # Motor source exists but derived hasn't been processed yet — skip for now
+                        print(f'No reference outputs found for {ref_tag}, skipping derived acquisition {tag}.', flush=True)
+                        continue
+                    # Source acq is rest-only → run full processing
+                    if n_slices_avg is not None:
+                        epi_avg_slices_processing(ID, source_tag, tag, n_slices_avg, warpT2w_PAM50_files, redo, verbose)
+                    else:
+                        epi_smooth_slices_processing(ID, source_tag, tag, smooth_width, warpT2w_PAM50_files, redo, verbose)
                 else:
-                    epi_smooth_slices_moco(ID, source_tag, tag, smooth_width, redo, verbose)
-                copy_segmentation_from_ref_tag(ID, tag, ref_tag, manual_dir, preprocessing_dir)
-                copy_csf_segmentation_from_ref_tag(ID, tag, ref_tag, manual_dir, preprocessing_dir)
-                copy_warping_fields_from_ref_tag(ID, tag, ref_tag, preprocessing_dir)
+                    if n_slices_avg is not None:
+                        epi_avg_slices_moco(ID, source_tag, tag, n_slices_avg, redo, verbose)
+                    else:
+                        epi_smooth_slices_moco(ID, source_tag, tag, smooth_width, redo, verbose)
+                    copy_segmentation_from_ref_tag(ID, tag, ref_tag, manual_dir, preprocessing_dir)
+                    copy_csf_segmentation_from_ref_tag(ID, tag, ref_tag, manual_dir, preprocessing_dir)
+                    copy_warping_fields_from_ref_tag(ID, tag, ref_tag, preprocessing_dir)
 
             print(f'=== Derived acquisition processing : Done  {ID} {tag} ===', flush=True)
 
