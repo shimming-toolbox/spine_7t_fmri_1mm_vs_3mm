@@ -69,7 +69,7 @@ timestamp=$(date +"%Y%m%d_%H%M%S")
 
 if [ "${RUN_PREPROSS}" = true ]; then
     echo "Starting preprocessing..."
-    nohup python -u ../code/preprocessing_workflow.py --path-data "${PATH_DATA}"  --ids "${IDs[@]}" "${TASKS_ARG[@]}" --redo "${REDO}" \
+    nohup ${PYTHON} -u ../code/preprocessing_workflow.py --path-data "${PATH_DATA}"  --ids "${IDs[@]}" "${TASKS_ARG[@]}" --redo "${REDO}" \
     > "nohup_preprocessing_${timestamp}.txt" 2>&1 &
 
     PID=$!
@@ -89,7 +89,7 @@ exit
 
 if [ "${RUN_DENOISING}" = true ]; then
     echo "Starting denoising..."
-    nohup python -u ../code/denoising_workflow.py --path-data "${PATH_DATA}" --ids "${IDs[@]}" "${TASKS_ARG[@]}" --redo "${REDO}" \
+    nohup ${PYTHON} -u ../code/denoising_workflow.py --path-data "${PATH_DATA}" --ids "${IDs[@]}" "${TASKS_ARG[@]}" --redo "${REDO}" \
     > "nohup_denoising_${timestamp}.txt" 2>&1 &
     
     PID=$!
@@ -107,7 +107,7 @@ fi
 
 if [ "${RUN_FIRSTLEVEL}" = true ]; then
     echo "Starting first level analysis..."
-    nohup python -u ../code/firstlevel_workflow.py --path-data "${PATH_DATA}" --ids "${IDs[@]}" "${TASKS_ARG[@]}" --redo "${REDO}" \
+    nohup ${PYTHON} -u ../code/firstlevel_workflow.py --path-data "${PATH_DATA}" --ids "${IDs[@]}" "${TASKS_ARG[@]}" --redo "${REDO}" \
     > "nohup_firstlevel_${timestamp}.txt" 2>&1 &
 
     PID=$!
@@ -124,7 +124,7 @@ fi
 # --------------------------
 if [ "${RUN_SECONDLEVEL}" = true ]; then
     echo "Starting second level analysis..."
-    nohup python -u ../code/secondlevel_workflow.py --path-data "${PATH_DATA}" --ids "${IDs[@]}" "${TASKS_ARG[@]}" --redo "${REDO}" \
+    nohup ${PYTHON} -u ../code/secondlevel_workflow.py --path-data "${PATH_DATA}" --ids "${IDs[@]}" "${TASKS_ARG[@]}" --redo "${REDO}" \
     > "nohup_secondlevel_${timestamp}.txt" 2>&1 &
 
     PID=$!
