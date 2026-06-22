@@ -819,8 +819,9 @@ class EpiComparison:
             vmax = vmax - 0.2 * delta
 
             frame_labels = ["shimBase (2nd order)", "shimSlice (f0xyz)"]
-            title_text = fig.text(0.01, 0.85, frame_labels[0], color='white', fontsize=4,
-                                  fontweight='bold', ha='left', va='top')
+            title_text = fig.text(0.01, 0.85, frame_labels[0], color='black', fontsize=4,
+                                  fontweight='bold', ha='left', va='top',
+                                  bbox=dict(facecolor='white', edgecolor='none', alpha=0.7, pad=0.5))
 
             ims = []
             for idx, slice_idx in enumerate(range(n_slices - 1, -1, -show_slice_factor)):
@@ -842,8 +843,8 @@ class EpiComparison:
                 template_slice_idx = self.func_slice_to_template_slice(slice_idx, com_baseline[0], com_baseline[1],
                                                                        fname_warp_from_pam50_to_func_baseline,
                                                                        fname_baseline, ID, task, name_baseline)
-                spinal_level = template_slice_to_spinal_level(template_slice_idx)[1]
-                axs[idx].text(0.15, 0.85, spinal_level, color='white', fontsize=4, fontweight='bold',
+                vert_level = template_slice_to_vert_level(template_slice_idx)[1]
+                axs[idx].text(0.15, 0.85, vert_level, color='white', fontsize=4, fontweight='bold',
                                        ha='center', va='center', transform=axs[idx].transAxes)
 
             def update(i):
@@ -1053,7 +1054,7 @@ class EpiComparison:
 
                 spine_thickness = 2.5
 
-                def _draw_panel(axs, img, mask, factor, n_panels, color, show_level=False, warp=None, fname_img=None, task=None, acq=None):
+                def _draw_panel(axs, img, mask, factor, n_panels, color, subtitle=None, show_level=False, warp=None, fname_img=None, task=None, acq=None):
                     range_slices = range(img.shape[2] - 1, -1, -factor)
                     for idx, slice_idx in enumerate(range_slices):
                         if idx >= n_max_panels:
@@ -1074,6 +1075,8 @@ class EpiComparison:
                         if idx == 0:
                             axs[idx].spines['top'].set_edgecolor(color)
                             axs[idx].spines['bottom'].set_visible(False)
+                            if subtitle:
+                                axs[idx].set_title(subtitle, fontsize=7, color=color, fontweight='bold', pad=2)
                         elif idx == len(range_slices) - 1:
                             axs[idx].spines['top'].set_visible(False)
                             axs[idx].spines['bottom'].set_edgecolor(color)
@@ -1082,16 +1085,19 @@ class EpiComparison:
                             axs[idx].spines['bottom'].set_visible(False)
                         if show_level and warp is not None:
                             t_idx = self.func_slice_to_template_slice(slice_idx, com[0], com[1], warp, fname_img, ID, task, acq)
-                            spinal_level = template_slice_to_spinal_level(t_idx)[1]
-                            axs[idx].text(0.1, 0.9, spinal_level, color='white', fontsize=5, fontweight='bold',
+                            vert_level = template_slice_to_vert_level(t_idx)[1]
+                            axs[idx].text(0.1, 0.9, vert_level, color='white', fontsize=5, fontweight='bold',
                                           ha='center', va='center', transform=axs[idx].transAxes)
 
                 _draw_panel(axs_baseline, img_baseline, mask_baseline, factor_3mm, n_panels_3mm, color_baseline,
-                            show_level=True, warp=fname_warp_pam50_to_base, fname_img=fname_baseline,
-                            task=task_3mm, acq=name_baseline)
-                _draw_panel(axs_slicewise, img_slicewise, mask_slicewise, factor_3mm, n_panels_3mm, color_slicewise)
-                _draw_panel(axs_base_avg, img_base_avg, mask_base_avg, factor_avg, n_panels_avg, color_base_avg)
-                _draw_panel(axs_slice_avg, img_slice_avg, mask_slice_avg, factor_avg, n_panels_avg, color_slice_avg)
+                            subtitle='3mm\nshimBase', show_level=True, warp=fname_warp_pam50_to_base,
+                            fname_img=fname_baseline, task=task_3mm, acq=name_baseline)
+                _draw_panel(axs_slicewise, img_slicewise, mask_slicewise, factor_3mm, n_panels_3mm, color_slicewise,
+                            subtitle='3mm\nshimSlice')
+                _draw_panel(axs_base_avg, img_base_avg, mask_base_avg, factor_avg, n_panels_avg, color_base_avg,
+                            subtitle='1mm+avg\nshimBase')
+                _draw_panel(axs_slice_avg, img_slice_avg, mask_slice_avg, factor_avg, n_panels_avg, color_slice_avg,
+                            subtitle='1mm+avg\nshimSlice')
 
                 if i_id == 0:
                     legend_fontsize = 8
@@ -1192,7 +1198,7 @@ class EpiComparison:
             _draw(axs_ba, img_base_avg, mask_base_avg, factor_avg)
             _draw(axs_sa, img_slice_avg, mask_slice_avg, factor_avg)
 
-            # spinal level labels on the 3mm baseline column
+            # vertebral level labels on the 3mm baseline column
             for idx, slice_idx in enumerate(range(img_baseline.shape[2] - 1, -1, -factor_3mm)):
                 if idx >= n_panels:
                     break
@@ -1200,8 +1206,8 @@ class EpiComparison:
                 if any(np.isnan(com)):
                     continue
                 t_idx = self.func_slice_to_template_slice(slice_idx, com[0], com[1], fname_warp_pam50_to_base, fname_baseline, ID, task_3mm, name_baseline)
-                spinal_level = template_slice_to_spinal_level(t_idx)[1]
-                axs_b[idx].text(0.1, 0.9, spinal_level, color='white', fontsize=5, fontweight='bold',
+                vert_level = template_slice_to_vert_level(t_idx)[1]
+                axs_b[idx].text(0.1, 0.9, vert_level, color='white', fontsize=5, fontweight='bold',
                                 ha='center', va='center', transform=axs_b[idx].transAxes)
 
             self.fname_fig_epi_comparison = os.path.join(self.path_fig_epi_comparison, f"sub-{ID}_epi_comparison.png")
