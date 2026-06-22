@@ -97,9 +97,11 @@ print("")
 
 # --- Group figure (IDs_EPIcomp only)
 # EPI comparison figure
-fig_epi_comparison = postprocess.EpiComparison(config, IDs, redo)
-fig_epi_comparison.create_figure(show_avg=False)
-    
+try:
+    fig_epi_comparison = postprocess.EpiComparison(config, IDs, redo)
+    fig_epi_comparison.create_figure(show_avg=False)
+except Exception as e:
+    print(f"WARNING: EPI comparison figure skipped: {e}", flush=True)
 
 print("=== EPI comparison script Done ===", flush=True)
 print("===================================", flush=True)
@@ -135,7 +137,16 @@ for ID_nb, ID in enumerate(IDs):
                 else:
                     run_name=""
 
-                denoised_fmri=glob.glob(os.path.join(denoising_dir.format(ID ), tag, config["denoising"]["denoised_dir"],"*"+run_name+"*_nostd_s.nii.gz"))[0]
+                denoised_candidates = glob.glob(os.path.join(denoising_dir.format(ID), tag, config["denoising"]["denoised_dir"],"*"+run_name+"*_nostd_s.nii.gz"))
+                if denoised_candidates:
+                    denoised_fmri = denoised_candidates[0]
+                else:
+                    moco_candidates = glob.glob(os.path.join(preprocessing_dir.format(ID), 'func', tag, 'sct_fmri_moco', f'sub-{ID}_{tag}_bold_moco.nii.gz'))
+                    if not moco_candidates:
+                        print(f"WARNING: No denoised or moco file found for sub-{ID} {tag}, skipping.", flush=True)
+                        continue
+                    denoised_fmri = moco_candidates[0]
+                    print(f"INFO: No denoised file found for sub-{ID} {tag}, falling back to moco output.", flush=True)
                 cord_seg_file = glob.glob(os.path.join(preprocessing_dir.format(ID), 'func',tag, config["preprocess_f"]["func_seg"].format(ID,tag,"")))[0]
                 warp_file = os.path.join(preprocessing_dir.format(ID), 'func', tag, f"sub-{ID}_{tag}_from-func_to_PAM50_mode-image_xfm.nii.gz")
 
@@ -241,22 +252,27 @@ for ID in IDs:
         for acq_name in config["design_exp"]["acq_names"]:
             tag="task-" + task_name + "_acq-" + acq_name
             raw_func=sorted(glob.glob(os.path.join(config["raw_dir"], f'sub-{ID}', 'func', f'sub-{ID}_{tag}_*bold.nii.gz')))
+            if not raw_func:
+                continue
             if len(raw_func)==2 and tag=="task-motor_acq-shimSlice+3mm":
                 for fname in raw_func:
                     match = re.search(r"_?(run-\d+)", fname)
                     run_name = match.group(1)
-                    i_fnames_runs.append(glob.glob(os.path.join(first_level_dir.format("glm",ID), f"{tag}", f"*{tag}*{run_name}*trial_RH-rest*inTemplate.nii.gz"))[0])
+                    matches = glob.glob(os.path.join(first_level_dir.format("glm",ID), f"{tag}", f"*{tag}*{run_name}*trial_RH-rest*inTemplate.nii.gz"))
+                    if matches:
+                        i_fnames_runs.append(matches[0])
             else:
                 match = re.search(r"_?(run-\d+)", raw_func[0])
-                if match:
-                    run_name=match.group(1)
-                else:
-                    run_name=""
-                i_fnames_runs.append(glob.glob(os.path.join(first_level_dir.format("glm",ID), f"{tag}", f"*{tag}*{run_name}*trial_RH-rest*inTemplate.nii.gz"))[0])
+                run_name = match.group(1) if match else ""
+                matches = glob.glob(os.path.join(first_level_dir.format("glm",ID), f"{tag}", f"*{tag}*{run_name}*trial_RH-rest*inTemplate.nii.gz"))
+                if matches:
+                    i_fnames_runs.append(matches[0])
 
-    i_fnames_by_runs.append(i_fnames_runs)
+    if i_fnames_runs:
+        i_fnames_by_runs.append(i_fnames_runs)
 
-figures.plot_first_level_maps(i_fnames=i_fnames_by_runs,
+try:
+    figures.plot_first_level_maps(i_fnames=i_fnames_by_runs,
                                          output_fname=os.path.join(fig_dir, f"first_level_task_by_runs_n{len(i_fnames_by_runs)}.png"),
                                           background_fname=os.path.join(path_code, "template", config["PAM50_t2"]),
                                           mask_fname=common_mask_fname,
@@ -266,4 +282,5 @@ figures.plot_first_level_maps(i_fnames=i_fnames_by_runs,
                                           participant_ids=IDs,
                                           verbose=True,
                                           redo=redo)
-
+except Exception as e:
+    print(f"WARNING: First-level figure skipped: {e}", flush=True)
