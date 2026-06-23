@@ -75,7 +75,7 @@ class GLM_main:
 
 
 
-    def run_first_level_glm(self, ID=None, i_fname=None,events_file=None,mask_file=None,task_name=None,run_name=None,contrasts = ["trial_RH-rest", "trial_RH", "rest"],smoothing_fwhm=1.5,verbose=True,redo=False):
+    def run_first_level_glm(self, ID=None, i_fname=None,events_file=None,mask_file=None,task_name=None,run_name=None,contrasts = ["trial_RH-rest", "trial_RH", "rest"],smoothing_fwhm=1.5,verbose=True,redo=False,tr=None):
         """
         Run first-level GLM for a specific subject and task.
 
@@ -123,11 +123,12 @@ class GLM_main:
         df_events=df_events#.iloc[1:-1] #remove the first raw
         df_events["trial_type"] = df_events["trial_type"].replace({"start": "rest"}) # start is equivalent to rest
 
-        # Load json file
-        json_file = os.path.join(self.raw_dir, f"sub-{ID}", "func", f"sub-{ID}_{task_name}{run_tag}_bold.json")
-        with open(json_file, "r") as f:
-            json_data = json.load(f)
-        tr = json_data.get("RepetitionTime")
+        # Load json file (skipped when tr is supplied directly, e.g. for derived acquisitions)
+        if tr is None:
+            json_file = os.path.join(self.raw_dir, f"sub-{ID}", "func", f"sub-{ID}_{task_name}{run_tag}_bold.json")
+            with open(json_file, "r") as f:
+                json_data = json.load(f)
+            tr = json_data.get("RepetitionTime")
 
         # Load fMRI image
         img = nib.load(i_fname)

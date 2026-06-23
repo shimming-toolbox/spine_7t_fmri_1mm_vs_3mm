@@ -313,4 +313,155 @@ for task in tasks:
         print(f"Saved: {fig_path}", flush=True)
         print(f"Stats (smooth3mm vs 3mm, task-{task}): {pstr23}  n={len(common_23)}", flush=True)
 
+# ------------------------------------------------------------------
+# 4. BOLD sensitivity: peak z and suprathreshold voxel count
+# ------------------------------------------------------------------
+print("=== BOLD sensitivity: extraction ===", flush=True)
+
+bold_csv_path = os.path.join(out_dir, "bold_sensitivity.csv")
+glm_base_dir = os.path.join(path_data, config["first_level"]["dir"].format("glm", "").split("sub")[0])
+pam50_mask_path = os.path.join(path_code, "template", config["PAM50_cord"])
+Z_THRESHOLD = 3.1  # FPR < 0.001 one-tailed
+
+if not os.path.exists(bold_csv_path) or redo:
+    if not os.path.exists(pam50_mask_path):
+        print(f"WARNING: PAM50 cord mask not found at {pam50_mask_path}, skipping BOLD sensitivity.", flush=True)
+    else:
+        pam50_mask = nib.load(pam50_mask_path).get_fdata() > 0
+        bold_records = []
+
+        for ID in IDs:
+            for task in tasks:
+                for acq_name in ALL_ACQS:
+                    tag = f"task-{task}_acq-{acq_name}"
+                    # z-map in PAM50 space — contrast: trial_RH-rest
+                    zmap_candidates = glob.glob(os.path.join(
+                        glm_base_dir, f"sub-{ID}", tag,
+                        f"sub-{ID}_{tag}*trial_RH-rest*inTemplate.nii.gz"
+                    ))
+                    if not zmap_candidates:
+                        print(f"INFO: No z-map for sub-{ID} {tag}, skipping.", flush=True)
+                        continue
+                    zmap_path = sorted(zmap_candidates)[-1]
+
+                    zdata = nib.load(zmap_path).get_fdata()
+                    zvals = zdata[pam50_mask]
+                    zvals = zvals[np.isfinite(zvals)]
+                    if zvals.size == 0:
+                        continue
+
+                    bold_records.append({
+                        "subject": ID,
+                        "task": task,
+                        "acq": acq_name,
+                        "peak_z": float(np.max(zvals)),
+                        "n_active": int(np.sum(zvals > Z_THRESHOLD)),
+                    })
+
+        bold_df = pd.DataFrame(bold_records)
+        bold_df.to_csv(bold_csv_path, index=False)
+        print(f"Saved: {bold_csv_path}", flush=True)
+        print(bold_df.to_string(index=False), flush=True)
+else:
+    bold_df = pd.read_csv(bold_csv_path)
+    print(f"Loaded existing: {bold_csv_path}", flush=True)
+    print(bold_df.to_string(index=False), flush=True)
+
+# Paired figures for each metric
+for metric, ylabel in [("peak_z", "Peak z-score within PAM50 SC mask"),
+                        ("n_active", f"Suprathreshold voxels (z > {Z_THRESHOLD})")]:
+    for task in tasks:
+        bdf_task = bold_df[bold_df["task"] == task] if "task" in bold_df.columns else bold_df
+
+        for acq1, acq2, acq3, shim_label in SHIM_TRIPLETS:
+            fig_path = os.path.join(fig_dir, f"{metric}_{shim_label}_{task}_triplet.png")
+            if os.path.exists(fig_path) and not redo:
+                print(f"Figure already exists: {fig_path}", flush=True)
+                continue
+
+            d = {
+                a: bdf_task[bdf_task["acq"] == a].set_index("subject")[metric]
+                for a in [acq1, acq2, acq3]
+            }
+            common_all = d[acq1].index.intersection(d[acq2].index).intersection(d[acq3].index)
+            common_23  = d[acq2].index.intersection(d[acq3].index)
+
+            if len(common_23) < 2:
+                print(
+                    f"WARNING: Only {len(common_23)} paired subject(s) for "
+                    f"{acq2} vs {acq3} ({metric}, task-{task}) — skipping.",
+                    flush=True,
+                )
+                continue
+
+            v2 = d[acq2].loc[common_23].values
+            v3 = d[acq3].loc[common_23].values
+            stat23, pval23, pstr23 = wilcoxon_str(v2, v3)
+
+            # stats CSV
+            pd.DataFrame([{
+                "metric": metric, "cond1": acq2, "cond2": acq3,
+                "task": task, "N_pairs": len(common_23),
+                "mean_cond1": v2.mean(), "std_cond1": v2.std(),
+                "mean_cond2": v3.mean(), "std_cond2": v3.std(),
+                "wilcoxon_stat": stat23, "p_value": pval23,
+                "significance": pstr23.split()[-1],
+            }]).to_csv(
+                os.path.join(out_dir, f"{metric}_{shim_label}_{task}_stats.csv"), index=False
+            )
+
+            # figure
+            fig, ax = plt.subplots(figsize=(4, 4.5))
+            xpos = [0, 1, 2]
+            acqs = [acq1, acq2, acq3]
+            vals_list = []
+            for acq in acqs:
+                subs = common_23 if acq != acq1 else common_all
+                vals_list.append(d[acq].reindex(subs).dropna().values if len(subs) > 0 else np.array([]))
+
+            bp_data = [v for v in vals_list if v.size > 0]
+            bp_pos  = [xpos[i] for i, v in enumerate(vals_list) if v.size > 0]
+            bp_cols = [COLORS_3[i] for i, v in enumerate(vals_list) if v.size > 0]
+
+            bp = ax.boxplot(bp_data, positions=bp_pos, widths=0.5,
+                            patch_artist=True, showfliers=False,
+                            medianprops=dict(color="white", linewidth=2))
+            for patch, col in zip(bp["boxes"], bp_cols):
+                patch.set_facecolor(col); patch.set_alpha(0.45)
+            for wh, ca, col in zip(bp["whiskers"], bp["caps"],
+                                   [c for c in bp_cols for _ in range(2)]):
+                wh.set_color(col); wh.set_alpha(0.6)
+                ca.set_color(col); ca.set_alpha(0.6)
+
+            for sub in common_all:
+                y_vals = [d[a].get(sub, np.nan) for a in acqs]
+                ax.plot(xpos, y_vals, "o-", color="dimgray",
+                        alpha=0.5, linewidth=1, markersize=4, zorder=3)
+            for sub in common_23.difference(common_all):
+                ax.plot([1, 2], [d[acq2][sub], d[acq3][sub]], "o--",
+                        color="dimgray", alpha=0.4, linewidth=1, markersize=4, zorder=3)
+
+            ax.set_ylim(bottom=0)
+            y_ceil = max(max(v) for v in bp_data) * 1.25
+            ax.set_ylim(top=y_ceil)
+            draw_bracket(ax, 1, 2, y_ceil * 0.91, pstr23, fontsize=8)
+
+            ax.set_xticks(xpos)
+            ax.set_xticklabels([XLABELS_3[a] for a in acqs], fontsize=9)
+            ax.set_ylabel(ylabel, fontsize=9)
+            ax.set_title(
+                f"{metric}: 1mm vs 3mm  ({shim_label}, task-{task})\n"
+                f"n={len(common_23)} paired (smooth vs native 3mm)",
+                fontsize=9,
+            )
+            ax.set_xlim(-0.6, 2.6)
+            ax.spines["top"].set_visible(False)
+            ax.spines["right"].set_visible(False)
+
+            fig.tight_layout()
+            fig.savefig(fig_path, dpi=150, bbox_inches="tight")
+            plt.close(fig)
+            print(f"Saved: {fig_path}", flush=True)
+            print(f"Stats {metric} (smooth3mm vs 3mm, task-{task}): {pstr23}  n={len(common_23)}", flush=True)
+
 print("=== compare_workflow done ===", flush=True)
