@@ -2,7 +2,7 @@
 # coding: utf-8
 
 # Quantitative comparison of 1mm vs 3mm fMRI acquisitions.
-# Current metric: mean tSNR within the spinal cord mask (native space).
+# Metrics: tSNR within SC mask, BOLD sensitivity (peak z, n_active), MI with T2*w GRE.
 # Compares: shimSlice+1mm+sms2 (raw), shimSlice+1mm+sms2+smooth3mm, shimSlice+3mm.
 
 import json, os, glob, argparse, sys
@@ -463,5 +463,188 @@ for metric, ylabel in [("peak_z", "Peak z-score within PAM50 SC mask"),
             plt.close(fig)
             print(f"Saved: {fig_path}", flush=True)
             print(f"Stats {metric} (smooth3mm vs 3mm, task-{task}): {pstr23}  n={len(common_23)}", flush=True)
+
+# ------------------------------------------------------------------
+# 5. Mutual Information with T2*w GRE (distortion + dropout proxy)
+# ------------------------------------------------------------------
+# Both the mean EPI and the T2*w are registered to PAM50 space during
+# preprocessing, so MI is computed in that common space within the
+# PAM50 cord mask.  Higher MI = better EPI-anatomy correspondence
+# (less distortion and less signal dropout).
+# All 9 subjects are usable here since preprocessing ran on all of them.
+# ------------------------------------------------------------------
+print("=== MI with T2*w GRE: extraction ===", flush=True)
+
+MI_BINS   = 32
+anat_dir  = os.path.join(path_data, config["preprocess_dir"]["main_dir"], "anat")
+mi_cache  = os.path.join(out_dir, "t2star_pam50")
+os.makedirs(mi_cache, exist_ok=True)
+mi_csv    = os.path.join(out_dir, "mi_t2star.csv")
+
+
+def _compute_mi(x, y, bins=MI_BINS):
+    """Histogram-based mutual information between two 1-D arrays."""
+    hist2d, _, _ = np.histogram2d(x, y, bins=bins)
+    pxy  = hist2d / hist2d.sum()
+    px   = pxy.sum(axis=1, keepdims=True)
+    py   = pxy.sum(axis=0, keepdims=True)
+    mask = pxy > 0
+    return float(np.sum(pxy[mask] * np.log(pxy[mask] / (px * py)[mask])))
+
+
+def _t2star_in_pam50(ID):
+    """Warp T2*w GRE to PAM50 space and return the path (cached)."""
+    out_path = os.path.join(mi_cache, f"sub-{ID}_T2star_inPAM50.nii.gz")
+    if os.path.exists(out_path) and not redo:
+        return out_path
+    t2star = os.path.join(path_data, f"sub-{ID}", "anat", f"sub-{ID}_T2star.nii.gz")
+    warp   = os.path.join(
+        preprocessing_dir.format(ID),
+        "anat", "sct_register_to_template",
+        f"sub-{ID}_from-anat_to-PAM50_mode-image_xfm.nii.gz"
+    )
+    template = os.path.join(path_code, "template", config["PAM50_t2"])
+    if not os.path.exists(t2star) or not os.path.exists(warp):
+        return None
+    cmd = (f"sct_apply_transfo -i {t2star} -d {template} -w {warp} "
+           f"-o {out_path} -x spline")
+    ret = os.system(cmd)
+    return out_path if ret == 0 and os.path.exists(out_path) else None
+
+
+if not os.path.exists(mi_csv) or redo:
+    pam50_mask_data = nib.load(pam50_mask_path).get_fdata() > 0
+    mi_records = []
+
+    for ID in IDs:
+        t2star_pam50 = _t2star_in_pam50(ID)
+        if t2star_pam50 is None:
+            print(f"WARNING: Could not warp T2*w for sub-{ID}, skipping.", flush=True)
+            continue
+        t2_vals = nib.load(t2star_pam50).get_fdata()[pam50_mask_data]
+
+        for task in tasks:
+            for acq_name in ALL_ACQS:
+                tag = f"task-{task}_acq-{acq_name}"
+                # mean EPI in PAM50 (may include run number in filename)
+                epi_candidates = glob.glob(os.path.join(
+                    preprocessing_dir.format(ID), "func", tag,
+                    "sct_register_multimodal",
+                    f"sub-{ID}_{tag}*_bold_moco_mean_coreg_in_PAM50.nii.gz"
+                ))
+                if not epi_candidates:
+                    print(f"INFO: No mean EPI in PAM50 for sub-{ID} {tag}, skipping.", flush=True)
+                    continue
+                epi_pam50 = sorted(epi_candidates)[-1]
+
+                epi_vals = nib.load(epi_pam50).get_fdata()[pam50_mask_data]
+                # keep only voxels finite in both images
+                valid = np.isfinite(epi_vals) & np.isfinite(t2_vals) & (epi_vals > 0)
+                if valid.sum() < 10:
+                    continue
+
+                mi_val = _compute_mi(epi_vals[valid], t2_vals[valid])
+                mi_records.append({
+                    "subject": ID, "task": task, "acq": acq_name, "mi": mi_val
+                })
+                print(f"sub-{ID} {tag}: MI = {mi_val:.4f}", flush=True)
+
+    mi_df = pd.DataFrame(mi_records)
+    mi_df.to_csv(mi_csv, index=False)
+    print(f"Saved: {mi_csv}", flush=True)
+else:
+    mi_df = pd.read_csv(mi_csv)
+    print(f"Loaded existing: {mi_csv}", flush=True)
+
+print(mi_df.to_string(index=False), flush=True)
+
+# Paired triplet figure: 1mm | smooth3mm | 3mm
+for task in tasks:
+    mi_task = mi_df[mi_df["task"] == task] if "task" in mi_df.columns else mi_df
+
+    for acq1, acq2, acq3, shim_label in SHIM_TRIPLETS:
+        fig_path = os.path.join(fig_dir, f"mi_t2star_{shim_label}_{task}_triplet.png")
+        if os.path.exists(fig_path) and not redo:
+            print(f"Figure already exists: {fig_path}", flush=True)
+            continue
+
+        d = {
+            a: mi_task[mi_task["acq"] == a].set_index("subject")["mi"]
+            for a in [acq1, acq2, acq3]
+        }
+        common_all = d[acq1].index.intersection(d[acq2].index).intersection(d[acq3].index)
+        common_23  = d[acq2].index.intersection(d[acq3].index)
+
+        if len(common_23) < 2:
+            print(f"WARNING: <2 pairs for MI {acq2} vs {acq3}, skipping.", flush=True)
+            continue
+
+        v2 = d[acq2].loc[common_23].values
+        v3 = d[acq3].loc[common_23].values
+        stat23, pval23, pstr23 = wilcoxon_str(v2, v3)
+
+        pd.DataFrame([{
+            "metric": "mi", "cond1": acq2, "cond2": acq3, "task": task,
+            "N_pairs": len(common_23),
+            "mean_cond1": v2.mean(), "std_cond1": v2.std(),
+            "mean_cond2": v3.mean(), "std_cond2": v3.std(),
+            "wilcoxon_stat": stat23, "p_value": pval23,
+            "significance": pstr23.split()[-1],
+        }]).to_csv(
+            os.path.join(out_dir, f"mi_t2star_{shim_label}_{task}_stats.csv"), index=False
+        )
+
+        fig, ax = plt.subplots(figsize=(4, 4.5))
+        xpos = [0, 1, 2]
+        acqs = [acq1, acq2, acq3]
+        vals_list = []
+        for acq in acqs:
+            subs = common_23 if acq != acq1 else common_all
+            vals_list.append(d[acq].reindex(subs).dropna().values if len(subs) > 0 else np.array([]))
+
+        bp_data = [v for v in vals_list if v.size > 0]
+        bp_pos  = [xpos[i] for i, v in enumerate(vals_list) if v.size > 0]
+        bp_cols = [COLORS_3[i] for i, v in enumerate(vals_list) if v.size > 0]
+
+        bp = ax.boxplot(bp_data, positions=bp_pos, widths=0.5,
+                        patch_artist=True, showfliers=False,
+                        medianprops=dict(color="white", linewidth=2))
+        for patch, col in zip(bp["boxes"], bp_cols):
+            patch.set_facecolor(col); patch.set_alpha(0.45)
+        for wh, ca, col in zip(bp["whiskers"], bp["caps"],
+                               [c for c in bp_cols for _ in range(2)]):
+            wh.set_color(col); wh.set_alpha(0.6)
+            ca.set_color(col); ca.set_alpha(0.6)
+
+        for sub in common_all:
+            y_vals = [d[a].get(sub, np.nan) for a in acqs]
+            ax.plot(xpos, y_vals, "o-", color="dimgray",
+                    alpha=0.5, linewidth=1, markersize=4, zorder=3)
+        for sub in common_23.difference(common_all):
+            ax.plot([1, 2], [d[acq2][sub], d[acq3][sub]], "o--",
+                    color="dimgray", alpha=0.4, linewidth=1, markersize=4, zorder=3)
+
+        ax.set_ylim(bottom=0)
+        y_ceil = max(max(v) for v in bp_data) * 1.25
+        ax.set_ylim(top=y_ceil)
+        draw_bracket(ax, 1, 2, y_ceil * 0.91, pstr23, fontsize=8)
+
+        ax.set_xticks(xpos)
+        ax.set_xticklabels([XLABELS_3[a] for a in acqs], fontsize=9)
+        ax.set_ylabel("Mutual Information with T2*w GRE\n(PAM50 space, within SC mask)", fontsize=9)
+        ax.set_title(
+            f"MI with T2*w: 1mm vs 3mm  ({shim_label}, task-{task})\n"
+            f"n={len(common_23)} paired (smooth vs native 3mm)",
+            fontsize=9,
+        )
+        ax.set_xlim(-0.6, 2.6)
+        ax.spines["top"].set_visible(False)
+        ax.spines["right"].set_visible(False)
+
+        fig.tight_layout()
+        fig.savefig(fig_path, dpi=150, bbox_inches="tight")
+        plt.close(fig)
+        print(f"Saved: {fig_path}", flush=True)
+        print(f"Stats MI (smooth3mm vs 3mm, task-{task}): {pstr23}  n={len(common_23)}", flush=True)
 
 print("=== compare_workflow done ===", flush=True)
