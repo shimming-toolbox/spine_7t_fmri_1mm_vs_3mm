@@ -467,19 +467,31 @@ for metric, ylabel in [("peak_z", "Peak z-score within PAM50 SC mask"),
 # ------------------------------------------------------------------
 # 5. Mutual Information with T2*w GRE (distortion + dropout proxy)
 # ------------------------------------------------------------------
-# Both the mean EPI and the T2*w are registered to PAM50 space during
-# preprocessing, so MI is computed in that common space within the
-# PAM50 cord mask.  Higher MI = better EPI-anatomy correspondence
-# (less distortion and less signal dropout).
-# All 9 subjects are usable here since preprocessing ran on all of them.
+# Mean EPI and T2*w are both registered to PAM50 space during
+# preprocessing; MI is computed in that common space within the PAM50
+# cord mask.  Higher MI = better EPI-anatomy correspondence.
+#
+# shimBase acquisitions only exist in the rest task, shimSlice in the
+# motor task, so we always loop over ALL config tasks (regardless of
+# what --tasks was given) to capture both shim conditions.
+#
+# 4-condition figure compares shimBase vs shimSlice within each
+# resolution (3mm | 1mm), using the task where each condition was
+# acquired:
+#   shimBase+3mm        ← rest
+#   shimSlice+3mm       ← motor
+#   shimBase+1mm+sms2   ← rest
+#   shimSlice+1mm+sms2+smooth3mm ← motor
 # ------------------------------------------------------------------
 print("=== MI with T2*w GRE: extraction ===", flush=True)
 
-MI_BINS   = 32
-anat_dir  = os.path.join(path_data, config["preprocess_dir"]["main_dir"], "anat")
-mi_cache  = os.path.join(out_dir, "t2star_pam50")
+MI_BINS  = 32
+mi_cache = os.path.join(out_dir, "t2star_pam50")
 os.makedirs(mi_cache, exist_ok=True)
-mi_csv    = os.path.join(out_dir, "mi_t2star.csv")
+mi_csv   = os.path.join(out_dir, "mi_t2star.csv")
+
+# Always scan all tasks so shimBase rest data is captured
+all_tasks_config = config["design_exp"]["task_names"]
 
 
 def _compute_mi(x, y, bins=MI_BINS):
@@ -523,10 +535,9 @@ if not os.path.exists(mi_csv) or redo:
             continue
         t2_vals = nib.load(t2star_pam50).get_fdata()[pam50_mask_data]
 
-        for task in tasks:
+        for task in all_tasks_config:
             for acq_name in ALL_ACQS:
                 tag = f"task-{task}_acq-{acq_name}"
-                # mean EPI in PAM50 (may include run number in filename)
                 epi_candidates = glob.glob(os.path.join(
                     preprocessing_dir.format(ID), "func", tag,
                     "sct_register_multimodal",
@@ -538,7 +549,6 @@ if not os.path.exists(mi_csv) or redo:
                 epi_pam50 = sorted(epi_candidates)[-1]
 
                 epi_vals = nib.load(epi_pam50).get_fdata()[pam50_mask_data]
-                # keep only voxels finite in both images
                 valid = np.isfinite(epi_vals) & np.isfinite(t2_vals) & (epi_vals > 0)
                 if valid.sum() < 10:
                     continue
@@ -558,93 +568,117 @@ else:
 
 print(mi_df.to_string(index=False), flush=True)
 
-# Paired triplet figure: 1mm | smooth3mm | 3mm
-for task in tasks:
-    mi_task = mi_df[mi_df["task"] == task] if "task" in mi_df.columns else mi_df
+# ------------------------------------------------------------------
+# 4-condition figure: shimBase vs shimSlice, within 3mm and 1mm
+# ------------------------------------------------------------------
+# Each condition is drawn from the task where it was acquired:
+#   shimBase+3mm       ← rest   shimSlice+3mm             ← motor
+#   shimBase+1mm+sms2  ← rest   shimSlice+1mm+sms2+smooth3mm ← motor
+#
+# xpos grouped by resolution: [0, 1] = 3mm group, [2.5, 3.5] = 1mm group
+# Stats: shimBase vs shimSlice within each group (Wilcoxon signed-rank)
+# ------------------------------------------------------------------
+MI_4COND = [
+    # (acq_name,                      task,    x,    color,     label)
+    ("shimBase+3mm",                   "rest",  0,    "#2166AC", "shimBase\n3mm"),
+    ("shimSlice+3mm",                  "motor", 1,    "#74ADD1", "shimSlice\n3mm"),
+    ("shimBase+1mm+sms2",              "rest",  2.5,  "#D73027", "shimBase\n1mm"),
+    ("shimSlice+1mm+sms2+smooth3mm",   "motor", 3.5,  "#F4A582", "shimSlice\n1mm\n(smooth3mm)"),
+]
 
-    for acq1, acq2, acq3, shim_label in SHIM_TRIPLETS:
-        fig_path = os.path.join(fig_dir, f"mi_t2star_{shim_label}_{task}_triplet.png")
-        if os.path.exists(fig_path) and not redo:
-            print(f"Figure already exists: {fig_path}", flush=True)
-            continue
+fig_path_4 = os.path.join(fig_dir, "mi_t2star_4cond.png")
+if not os.path.exists(fig_path_4) or redo:
+    # Build per-condition subject→MI lookup
+    mi_ser = {}
+    for acq_name, task, *_ in MI_4COND:
+        sub_df = mi_df[(mi_df["task"] == task) & (mi_df["acq"] == acq_name)]
+        mi_ser[acq_name] = sub_df.set_index("subject")["mi"]
 
-        d = {
-            a: mi_task[mi_task["acq"] == a].set_index("subject")["mi"]
-            for a in [acq1, acq2, acq3]
-        }
-        common_all = d[acq1].index.intersection(d[acq2].index).intersection(d[acq3].index)
-        common_23  = d[acq2].index.intersection(d[acq3].index)
+    # Pairs for statistics
+    base3_acq, slice3_acq  = MI_4COND[0][0], MI_4COND[1][0]
+    base1_acq, slice1_acq  = MI_4COND[2][0], MI_4COND[3][0]
+    common_3mm = mi_ser[base3_acq].index.intersection(mi_ser[slice3_acq].index)
+    common_1mm = mi_ser[base1_acq].index.intersection(mi_ser[slice1_acq].index)
 
-        if len(common_23) < 2:
-            print(f"WARNING: <2 pairs for MI {acq2} vs {acq3}, skipping.", flush=True)
-            continue
-
-        v2 = d[acq2].loc[common_23].values
-        v3 = d[acq3].loc[common_23].values
-        stat23, pval23, pstr23 = wilcoxon_str(v2, v3)
-
-        pd.DataFrame([{
-            "metric": "mi", "cond1": acq2, "cond2": acq3, "task": task,
-            "N_pairs": len(common_23),
-            "mean_cond1": v2.mean(), "std_cond1": v2.std(),
-            "mean_cond2": v3.mean(), "std_cond2": v3.std(),
-            "wilcoxon_stat": stat23, "p_value": pval23,
-            "significance": pstr23.split()[-1],
-        }]).to_csv(
-            os.path.join(out_dir, f"mi_t2star_{shim_label}_{task}_stats.csv"), index=False
+    stats_rows = []
+    for a, b, common, grp in [
+        (base3_acq, slice3_acq, common_3mm, "3mm"),
+        (base1_acq, slice1_acq, common_1mm, "1mm"),
+    ]:
+        if len(common) >= 2:
+            va = mi_ser[a].loc[common].values
+            vb = mi_ser[b].loc[common].values
+            s, p, ps = wilcoxon_str(va, vb)
+            stats_rows.append({
+                "metric": "mi", "group": grp, "cond1": a, "cond2": b,
+                "N_pairs": len(common),
+                "mean_cond1": va.mean(), "std_cond1": va.std(),
+                "mean_cond2": vb.mean(), "std_cond2": vb.std(),
+                "wilcoxon_stat": s, "p_value": p, "significance": ps.split()[-1],
+            })
+    if stats_rows:
+        pd.DataFrame(stats_rows).to_csv(
+            os.path.join(out_dir, "mi_t2star_4cond_stats.csv"), index=False
         )
 
-        fig, ax = plt.subplots(figsize=(4, 4.5))
-        xpos = [0, 1, 2]
-        acqs = [acq1, acq2, acq3]
-        vals_list = []
-        for acq in acqs:
-            subs = common_23 if acq != acq1 else common_all
-            vals_list.append(d[acq].reindex(subs).dropna().values if len(subs) > 0 else np.array([]))
+    fig, ax = plt.subplots(figsize=(5.5, 4.5))
+    xpos_list  = [c[2] for c in MI_4COND]
+    color_list = [c[3] for c in MI_4COND]
+    label_list = [c[4] for c in MI_4COND]
+    vals_all   = [mi_ser[c[0]].dropna().values for c in MI_4COND]
 
-        bp_data = [v for v in vals_list if v.size > 0]
-        bp_pos  = [xpos[i] for i, v in enumerate(vals_list) if v.size > 0]
-        bp_cols = [COLORS_3[i] for i, v in enumerate(vals_list) if v.size > 0]
+    bp = ax.boxplot(vals_all, positions=xpos_list, widths=0.45,
+                    patch_artist=True, showfliers=False,
+                    medianprops=dict(color="white", linewidth=2))
+    for patch, col in zip(bp["boxes"], color_list):
+        patch.set_facecolor(col); patch.set_alpha(0.5)
+    for i, (wh, ca) in enumerate(zip(bp["whiskers"], bp["caps"])):
+        wh.set_color(color_list[i // 2]); wh.set_alpha(0.6)
+        ca.set_color(color_list[i // 2]); ca.set_alpha(0.6)
 
-        bp = ax.boxplot(bp_data, positions=bp_pos, widths=0.5,
-                        patch_artist=True, showfliers=False,
-                        medianprops=dict(color="white", linewidth=2))
-        for patch, col in zip(bp["boxes"], bp_cols):
-            patch.set_facecolor(col); patch.set_alpha(0.45)
-        for wh, ca, col in zip(bp["whiskers"], bp["caps"],
-                               [c for c in bp_cols for _ in range(2)]):
-            wh.set_color(col); wh.set_alpha(0.6)
-            ca.set_color(col); ca.set_alpha(0.6)
+    # Individual lines within each resolution group
+    for sub in common_3mm:
+        ax.plot([0, 1], [mi_ser[base3_acq][sub], mi_ser[slice3_acq][sub]],
+                "o-", color="dimgray", alpha=0.5, linewidth=1, markersize=4, zorder=3)
+    for sub in common_1mm:
+        ax.plot([2.5, 3.5], [mi_ser[base1_acq][sub], mi_ser[slice1_acq][sub]],
+                "o-", color="dimgray", alpha=0.5, linewidth=1, markersize=4, zorder=3)
 
-        for sub in common_all:
-            y_vals = [d[a].get(sub, np.nan) for a in acqs]
-            ax.plot(xpos, y_vals, "o-", color="dimgray",
-                    alpha=0.5, linewidth=1, markersize=4, zorder=3)
-        for sub in common_23.difference(common_all):
-            ax.plot([1, 2], [d[acq2][sub], d[acq3][sub]], "o--",
-                    color="dimgray", alpha=0.4, linewidth=1, markersize=4, zorder=3)
+    ax.set_ylim(bottom=0)
+    y_max = max(v.max() for v in vals_all if v.size > 0) * 1.35
+    ax.set_ylim(top=y_max)
 
-        ax.set_ylim(bottom=0)
-        y_ceil = max(max(v) for v in bp_data) * 1.25
-        ax.set_ylim(top=y_ceil)
-        draw_bracket(ax, 1, 2, y_ceil * 0.91, pstr23, fontsize=8)
+    bracket_y3 = y_max * 0.86
+    bracket_y1 = y_max * 0.86
+    for (a, b, common, grp), (bx1, bx2), by in [
+        ((base3_acq, slice3_acq, common_3mm, "3mm"), (0, 1),     bracket_y3),
+        ((base1_acq, slice1_acq, common_1mm, "1mm"), (2.5, 3.5), bracket_y1),
+    ]:
+        if len(common) >= 2:
+            va = mi_ser[a].loc[common].values
+            vb = mi_ser[b].loc[common].values
+            _, _, ps = wilcoxon_str(va, vb)
+            draw_bracket(ax, bx1, bx2, by, ps, fontsize=8)
+            print(f"Stats MI {grp} (shimBase vs shimSlice): {ps}  n={len(common)}", flush=True)
 
-        ax.set_xticks(xpos)
-        ax.set_xticklabels([XLABELS_3[a] for a in acqs], fontsize=9)
-        ax.set_ylabel("Mutual Information with T2*w GRE\n(PAM50 space, within SC mask)", fontsize=9)
-        ax.set_title(
-            f"MI with T2*w: 1mm vs 3mm  ({shim_label}, task-{task})\n"
-            f"n={len(common_23)} paired (smooth vs native 3mm)",
-            fontsize=9,
-        )
-        ax.set_xlim(-0.6, 2.6)
-        ax.spines["top"].set_visible(False)
-        ax.spines["right"].set_visible(False)
+    # Vertical separator between resolution groups
+    ax.axvline(x=1.75, color="lightgray", linewidth=0.8, linestyle="--", zorder=0)
+    ax.text(0.5,  y_max * 0.97, "3mm",                ha="center", va="top", fontsize=9, color="gray")
+    ax.text(3.0,  y_max * 0.97, "1mm (smooth3mm)",    ha="center", va="top", fontsize=9, color="gray")
 
-        fig.tight_layout()
-        fig.savefig(fig_path, dpi=150, bbox_inches="tight")
-        plt.close(fig)
-        print(f"Saved: {fig_path}", flush=True)
-        print(f"Stats MI (smooth3mm vs 3mm, task-{task}): {pstr23}  n={len(common_23)}", flush=True)
+    ax.set_xticks(xpos_list)
+    ax.set_xticklabels(label_list, fontsize=8.5)
+    ax.set_ylabel("Mutual Information with T2*w GRE\n(PAM50 space, within SC mask)", fontsize=9)
+    ax.set_title("MI with T2*w: shimBase vs shimSlice\n(3mm and 1mm acquisitions)", fontsize=9)
+    ax.set_xlim(-0.6, 4.1)
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+
+    fig.tight_layout()
+    fig.savefig(fig_path_4, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    print(f"Saved: {fig_path_4}", flush=True)
+else:
+    print(f"Figure already exists: {fig_path_4}", flush=True)
 
 print("=== compare_workflow done ===", flush=True)
