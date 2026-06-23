@@ -583,7 +583,7 @@ MI_4COND = [
     ("shimBase+3mm",                   "rest",  0,    "#2166AC", "shimBase\n3mm"),
     ("shimSlice+3mm",                  "motor", 1,    "#74ADD1", "shimSlice\n3mm"),
     ("shimBase+1mm+sms2",              "rest",  2.5,  "#D73027", "shimBase\n1mm"),
-    ("shimSlice+1mm+sms2+smooth3mm",   "motor", 3.5,  "#F4A582", "shimSlice\n1mm\n(smooth3mm)"),
+    ("shimSlice+1mm+sms2+smooth3mm",   "motor", 3.5,  "#F4A582", "shimSlice\n1mm"),
 ]
 
 fig_path_4 = os.path.join(fig_dir, "mi_t2star_4cond.png")
@@ -597,13 +597,15 @@ if not os.path.exists(fig_path_4) or redo:
     # Pairs for statistics
     base3_acq, slice3_acq  = MI_4COND[0][0], MI_4COND[1][0]
     base1_acq, slice1_acq  = MI_4COND[2][0], MI_4COND[3][0]
-    common_3mm = mi_ser[base3_acq].index.intersection(mi_ser[slice3_acq].index)
-    common_1mm = mi_ser[base1_acq].index.intersection(mi_ser[slice1_acq].index)
+    common_3mm       = mi_ser[base3_acq].index.intersection(mi_ser[slice3_acq].index)
+    common_1mm       = mi_ser[base1_acq].index.intersection(mi_ser[slice1_acq].index)
+    common_slice_res = mi_ser[slice3_acq].index.intersection(mi_ser[slice1_acq].index)
 
     stats_rows = []
     for a, b, common, grp in [
-        (base3_acq, slice3_acq, common_3mm, "3mm"),
-        (base1_acq, slice1_acq, common_1mm, "1mm"),
+        (base3_acq,  slice3_acq, common_3mm,       "3mm shimBase-vs-shimSlice"),
+        (base1_acq,  slice1_acq, common_1mm,       "1mm shimBase-vs-shimSlice"),
+        (slice3_acq, slice1_acq, common_slice_res, "shimSlice 3mm-vs-1mm"),
     ]:
         if len(common) >= 2:
             va = mi_ser[a].loc[common].values
@@ -645,26 +647,26 @@ if not os.path.exists(fig_path_4) or redo:
                 "o-", color="dimgray", alpha=0.5, linewidth=1, markersize=4, zorder=3)
 
     ax.set_ylim(bottom=0)
-    y_max = max(v.max() for v in vals_all if v.size > 0) * 1.35
+    y_max = max(v.max() for v in vals_all if v.size > 0) * 1.50
     ax.set_ylim(top=y_max)
 
-    bracket_y3 = y_max * 0.86
-    bracket_y1 = y_max * 0.86
+    # Three brackets at staggered heights to avoid overlap:
+    #   level 1 (lower):  shimBase vs shimSlice within 3mm  [0, 1]
+    #   level 1 (lower):  shimBase vs shimSlice within 1mm  [2.5, 3.5]
+    #   level 2 (higher): shimSlice 3mm vs 1mm              [1, 3.5]
+    bracket_inner_y = y_max * 0.83
+    bracket_outer_y = y_max * 0.96
     for (a, b, common, grp), (bx1, bx2), by in [
-        ((base3_acq, slice3_acq, common_3mm, "3mm"), (0, 1),     bracket_y3),
-        ((base1_acq, slice1_acq, common_1mm, "1mm"), (2.5, 3.5), bracket_y1),
+        ((base3_acq,  slice3_acq, common_3mm,       "3mm shimBase-vs-shimSlice"), (0,   1),   bracket_inner_y),
+        ((base1_acq,  slice1_acq, common_1mm,       "1mm shimBase-vs-shimSlice"), (2.5, 3.5), bracket_inner_y),
+        ((slice3_acq, slice1_acq, common_slice_res, "shimSlice 3mm-vs-1mm"),      (1,   3.5), bracket_outer_y),
     ]:
         if len(common) >= 2:
             va = mi_ser[a].loc[common].values
             vb = mi_ser[b].loc[common].values
             _, _, ps = wilcoxon_str(va, vb)
             draw_bracket(ax, bx1, bx2, by, ps, fontsize=8)
-            print(f"Stats MI {grp} (shimBase vs shimSlice): {ps}  n={len(common)}", flush=True)
-
-    # Vertical separator between resolution groups
-    ax.axvline(x=1.75, color="lightgray", linewidth=0.8, linestyle="--", zorder=0)
-    ax.text(0.5,  y_max * 0.97, "3mm",                ha="center", va="top", fontsize=9, color="gray")
-    ax.text(3.0,  y_max * 0.97, "1mm (smooth3mm)",    ha="center", va="top", fontsize=9, color="gray")
+            print(f"Stats MI {grp}: {ps}  n={len(common)}", flush=True)
 
     ax.set_xticks(xpos_list)
     ax.set_xticklabels(label_list, fontsize=8.5)
