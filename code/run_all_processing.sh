@@ -1,4 +1,7 @@
 #!/bin/bash
+# Keep the screen window open after the script exits (success or error) so logs can be reviewed.
+trap 'echo ""; echo "=== Script exited (code $?). Type '\''exit'\'' to close screen. ==="; exec bash' EXIT
+
 # --------------------------
 # User parameters
 # --------------------------
@@ -61,9 +64,9 @@ fi
 # --------------------------
 # Prepare log folder
 # --------------------------
-cd "${PATH_CODE}" || exit 1
+cd "${PATH_CODE}" || { echo "ERROR: could not cd to PATH_CODE='${PATH_CODE}'. Pass --path-code /path/to/repo"; exit 1; }
 mkdir -p log
-cd log || exit 1
+cd log || { echo "ERROR: could not cd into log/"; exit 1; }
 
 timestamp=$(date +"%Y%m%d_%H%M%S")
 
