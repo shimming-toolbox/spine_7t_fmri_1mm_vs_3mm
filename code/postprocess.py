@@ -751,11 +751,16 @@ class EpiComparison:
         self.name_base_avg = [k for k in avg_acq_names if "Base" in k][0]
         self.name_slice_avg = [k for k in avg_acq_names if "Slice" in k][0]
 
+        self.ids_with_avg = set()
         for ID in self.IDs:
             # shimBase+3mm was only acquired during the rest task (not motor), so use rest here
             create_mocomean_same_vols(ID, "rest", self.config, self.path_fig_data, self.redo)
-            # avg3mm derived acquisitions — task auto-detected per subject
-            create_mocomean_derived(ID, self.name_base_avg, self.name_slice_avg, self.config, self.path_fig_data, self.redo)
+            # avg3mm derived acquisitions — task auto-detected per subject; not all subjects have these
+            try:
+                create_mocomean_derived(ID, self.name_base_avg, self.name_slice_avg, self.config, self.path_fig_data, self.redo)
+                self.ids_with_avg.add(ID)
+            except RuntimeError as e:
+                print(f"INFO: Skipping avg3mm for sub-{ID}: {e}", flush=True)
 
         ### Create 1 figure per subject, showing moco mean in native space between baseline and slicewise shim
         if show_avg:
@@ -964,41 +969,39 @@ class EpiComparison:
             factor_3mm = 2
             factor_avg = 2
 
-            n_part = len(self.IDs)
-            if n_part > 5:
-                n_part = 5
-
-            ids_to_show = []
-            chose_if_available = ('094', '095', '100', '101', '106')
-            for i_part in range(n_part):
-                ID = chose_if_available[i_part] if chose_if_available[i_part] in self.IDs else self.IDs[i_part]
-                ids_to_show.append(ID)
+            ids_to_show = list(self.IDs)
+            n_part = len(ids_to_show)
 
             n_max_panels = 0
             for i_id, ID in enumerate(ids_to_show):
                 fname_3mm = self._select_moco_mean_same_vols(ID, name_baseline)
                 n_slices_3mm = nib.load(fname_3mm).shape[2]
                 n_max_panels = max(n_max_panels, round(n_slices_3mm / factor_3mm + 0.1))
-                fname_avg = self._select_moco_mean_same_vols(ID, name_base_avg)
-                n_slices_avg = nib.load(fname_avg).shape[2]
-                n_max_panels = max(n_max_panels, round(n_slices_avg / factor_avg + 0.1))
+                if ID in self.ids_with_avg:
+                    fname_avg = self._select_moco_mean_same_vols(ID, name_base_avg)
+                    n_slices_avg = nib.load(fname_avg).shape[2]
+                    n_max_panels = max(n_max_panels, round(n_slices_avg / factor_avg + 0.1))
 
-            # 5 cols per subject: base3mm, slice3mm, base_avg, slice_avg, gap
+            # 6 cols per subject: GRE, base3mm, slice3mm, base_avg, slice_avg, gap
             width_ratios = []
-            [width_ratios.extend([1, 1, 1, 1, 0.09]) for _ in range(n_part)]
+            [width_ratios.extend([1, 1, 1, 1, 1, 0.09]) for _ in range(n_part)]
             width_ratios = width_ratios[:-1]  # remove last gap
-            fig = plt.figure(figsize=(4.3 * n_part, n_max_panels))
-            gs_main = gridspec.GridSpec(2, n_part * 5 - 1, figure=fig, hspace=0, wspace=0, width_ratios=width_ratios, height_ratios=[0.001, 1])
+            fig = plt.figure(figsize=(5.5 * n_part, n_max_panels))
+            gs_main = gridspec.GridSpec(2, n_part * 6 - 1, figure=fig, hspace=0, wspace=0, width_ratios=width_ratios, height_ratios=[0.07, 1])
 
-            color_baseline = '#ADA8A8'
-            color_slicewise = '#ED263F'
-            color_base_avg = '#5599FF'
-            color_slice_avg = '#FF9900'
+            color_gre       = '#555555'   # dark gray for anatomy reference
+            color_baseline  = '#2166AC'   # dark blue  (shimBase 3mm)
+            color_slicewise = '#74ADD1'   # light blue (shimSlice 3mm)
+            color_base_avg  = '#D73027'   # dark red   (shimBase 1mm)
+            color_slice_avg = '#F4A582'   # light red  (shimSlice 1mm)
+
+            pam50_cord_path = os.path.join(self.config["code_dir"], "template", self.config["PAM50_cord"])
+            pam50_cord_data = nib.load(pam50_cord_path).get_fdata()
 
             print("IDs to show in the figure:", ids_to_show, flush=True)
             for i_id, ID in enumerate(ids_to_show):
 
-                gs_title = gs_main[0, i_id * 5:(i_id + 1) * 5 - 1].subgridspec(1, 1)
+                gs_title = gs_main[0, i_id * 6:(i_id + 1) * 6 - 1].subgridspec(1, 1)
                 ax_title = gs_title.subplots()
                 ax_title.axis('off')
                 ax_title.set_title(f"ID {ID}", fontsize=12, fontweight='bold')
@@ -1015,18 +1018,23 @@ class EpiComparison:
                 mask_baseline = nib.load(fname_seg_baseline).get_fdata()
                 mask_slicewise = nib.load(fname_seg_slicewise).get_fdata()
 
-                # --- avg3mm derived (motor task) ---
-                task_base_avg = self._get_task_of_moco_mean_same_vols(ID, name_base_avg)
-                task_slice_avg = self._get_task_of_moco_mean_same_vols(ID, name_slice_avg)
-                fname_base_avg = self._select_moco_mean_same_vols(ID, name_base_avg)
-                fname_seg_base_avg, _, _ = get_fname_seg_and_warps(ID, task_base_avg, name_base_avg, self.config)
-                fname_slice_avg = self._select_moco_mean_same_vols(ID, name_slice_avg)
-                fname_seg_slice_avg, _, _ = get_fname_seg_and_warps(ID, task_slice_avg, name_slice_avg, self.config)
-
-                img_base_avg = nib.load(fname_base_avg).get_fdata()
-                img_slice_avg = nib.load(fname_slice_avg).get_fdata()
-                mask_base_avg = nib.load(fname_seg_base_avg).get_fdata()
-                mask_slice_avg = nib.load(fname_seg_slice_avg).get_fdata()
+                # --- avg3mm derived (motor task) — only for subjects that have this data ---
+                has_avg = ID in self.ids_with_avg
+                if has_avg:
+                    task_base_avg = self._get_task_of_moco_mean_same_vols(ID, name_base_avg)
+                    task_slice_avg = self._get_task_of_moco_mean_same_vols(ID, name_slice_avg)
+                    fname_base_avg = self._select_moco_mean_same_vols(ID, name_base_avg)
+                    fname_seg_base_avg, _, _ = get_fname_seg_and_warps(ID, task_base_avg, name_base_avg, self.config)
+                    fname_slice_avg = self._select_moco_mean_same_vols(ID, name_slice_avg)
+                    fname_seg_slice_avg, _, _ = get_fname_seg_and_warps(ID, task_slice_avg, name_slice_avg, self.config)
+                    img_base_avg = nib.load(fname_base_avg).get_fdata()
+                    img_slice_avg = nib.load(fname_slice_avg).get_fdata()
+                    mask_base_avg = nib.load(fname_seg_base_avg).get_fdata()
+                    mask_slice_avg = nib.load(fname_seg_slice_avg).get_fdata()
+                    n_panels_avg = round(img_base_avg.shape[2] / factor_avg + 0.1)
+                else:
+                    img_base_avg = img_slice_avg = mask_base_avg = mask_slice_avg = None
+                    n_panels_avg = 0
 
                 bound_lr = 16
                 bound_ud = 16
@@ -1037,26 +1045,80 @@ class EpiComparison:
                 vmax = vmax - 0.2 * delta
 
                 n_panels_3mm = round(img_baseline.shape[2] / factor_3mm + 0.1)
-                n_panels_avg = round(img_base_avg.shape[2] / factor_avg + 0.1)
 
-                gs_baseline = gs_main[1, i_id * 5].subgridspec(n_max_panels, 1, hspace=0, wspace=0)
-                gs_slicewise = gs_main[1, i_id * 5 + 1].subgridspec(n_max_panels, 1, hspace=0, wspace=0)
-                gs_base_avg = gs_main[1, i_id * 5 + 2].subgridspec(n_max_panels, 1, hspace=0, wspace=0)
-                gs_slice_avg = gs_main[1, i_id * 5 + 3].subgridspec(n_max_panels, 1, hspace=0, wspace=0)
+                # --- GRE in PAM50 space ---
+                t2star_raw = os.path.join(self.config["raw_dir"], f"sub-{ID}", "anat", f"sub-{ID}_T2star.nii.gz")
+                t2star_pam50_path = os.path.join(self.path_fig_data, f"sub-{ID}", f"sub-{ID}_T2star_inPAM50.nii.gz")
+                if not os.path.exists(t2star_pam50_path) or self.redo:
+                    warp_anat_pam50 = os.path.join(
+                        self.config["raw_dir"],
+                        self.config["preprocess_dir"]["main_dir"].format(ID),
+                        "anat", "sct_register_to_template",
+                        f"sub-{ID}_from-anat_to-PAM50_mode-image_xfm.nii.gz"
+                    )
+                    pam50_t2_path = os.path.join(self.config["code_dir"], "template", self.config["PAM50_t2"])
+                    if os.path.exists(t2star_raw) and os.path.exists(warp_anat_pam50):
+                        os.system(f"sct_apply_transfo -i {t2star_raw} -d {pam50_t2_path} -w {warp_anat_pam50} -o {t2star_pam50_path} -x spline")
+                has_gre = os.path.exists(t2star_pam50_path)
+                if has_gre:
+                    img_gre = nib.load(t2star_pam50_path).get_fdata()
+                    # Determine EPI coverage z-range in PAM50
+                    epi_pam50_cands = glob.glob(os.path.join(
+                        self.config["raw_dir"],
+                        self.config["preprocess_dir"]["main_dir"].format(ID),
+                        "func", f"task-{task_3mm}_acq-{name_baseline}",
+                        "sct_register_multimodal",
+                        f"sub-{ID}_task-{task_3mm}_acq-{name_baseline}*_bold_moco_mean_coreg_in_PAM50.nii.gz"
+                    ))
+                    if epi_pam50_cands:
+                        epi_pam50_data = nib.load(sorted(epi_pam50_cands)[-1]).get_fdata()
+                        nz = np.where((epi_pam50_data > 0).any(axis=(0, 1)))[0]
+                        gre_z_min, gre_z_max = int(nz[0]), int(nz[-1])
+                    else:
+                        nz = np.where(pam50_cord_data.any(axis=(0, 1)))[0]
+                        gre_z_min, gre_z_max = int(nz[0]), int(nz[-1])
+                    n_gre_z = gre_z_max - gre_z_min + 1
+                    gre_step = max(1, round(n_gre_z / n_max_panels))
+                    gre_slices = list(range(gre_z_max, gre_z_min - 1, -gre_step))[:n_max_panels]
+                    # Compute GRE vmin/vmax from cord-cropped patches
+                    gre_flat = []
+                    for z in gre_slices:
+                        com_g = center_of_mass(pam50_cord_data[:, :, z])
+                        if any(np.isnan(com_g)):
+                            continue
+                        cx_g = slice(max(0, int(com_g[0] - bound_lr)), min(img_gre.shape[0], int(com_g[0] + bound_lr)))
+                        cy_g = slice(max(0, int(com_g[1] - bound_ud)), min(img_gre.shape[1], int(com_g[1] + bound_ud)))
+                        gre_flat.extend(img_gre[cx_g, cy_g, z].flatten())
+                    gre_flat = np.array(gre_flat)
+                    pos = gre_flat[gre_flat > 0]
+                    vmin_gre = float(np.percentile(pos, 1))  if pos.size else 0.0
+                    vmax_gre = float(np.percentile(pos, 99)) if pos.size else 1.0
+
+                gs_gre       = gs_main[1, i_id * 6].subgridspec(n_max_panels, 1, hspace=0, wspace=0)
+                gs_baseline  = gs_main[1, i_id * 6 + 1].subgridspec(n_max_panels, 1, hspace=0, wspace=0)
+                gs_slicewise = gs_main[1, i_id * 6 + 2].subgridspec(n_max_panels, 1, hspace=0, wspace=0)
+                gs_base_avg  = gs_main[1, i_id * 6 + 3].subgridspec(n_max_panels, 1, hspace=0, wspace=0)
+                gs_slice_avg = gs_main[1, i_id * 6 + 4].subgridspec(n_max_panels, 1, hspace=0, wspace=0)
+                axs_gre      = gs_gre.subplots()
                 axs_baseline = gs_baseline.subplots()
                 axs_slicewise = gs_slicewise.subplots()
                 axs_base_avg = gs_base_avg.subplots()
                 axs_slice_avg = gs_slice_avg.subplots()
 
                 # hide all panels first; only fill ones that have data
-                for ax_list in [axs_baseline, axs_slicewise, axs_base_avg, axs_slice_avg]:
+                for ax_list in [axs_gre, axs_baseline, axs_slicewise, axs_base_avg, axs_slice_avg]:
                     for ax in ax_list:
                         ax.axis('off')
 
                 spine_thickness = 2.5
 
-                def _draw_panel(axs, img, mask, factor, n_panels, color, subtitle=None, show_level=False, warp=None, fname_img=None, task=None, acq=None):
-                    range_slices = range(img.shape[2] - 1, -1, -factor)
+                def _draw_panel(axs, img, mask, factor, n_panels, color, subtitle=None, show_level=False,
+                                warp=None, fname_img=None, task=None, acq=None,
+                                vmin_img=None, vmax_img=None, explicit_slices=None):
+                    _vmin = vmin_img if vmin_img is not None else vmin
+                    _vmax = vmax_img if vmax_img is not None else vmax
+                    range_slices = explicit_slices if explicit_slices is not None else range(img.shape[2] - 1, -1, -factor)
+                    n_slices_total = len(range_slices) if explicit_slices is not None else len(list(range_slices))
                     for idx, slice_idx in enumerate(range_slices):
                         if idx >= n_max_panels:
                             break
@@ -1066,7 +1128,7 @@ class EpiComparison:
                         cx = slice(max(0, int(com[0] - bound_lr)), min(mask.shape[0], int(com[0] + bound_lr)))
                         cy = slice(max(0, int(com[1] - bound_ud)), min(mask.shape[1], int(com[1] + bound_ud)))
                         cropped = img[cx, cy, slice_idx]
-                        axs[idx].imshow(cropped.T, cmap='gray', origin='lower', vmin=vmin, vmax=vmax)
+                        axs[idx].imshow(cropped.T, cmap='gray', origin='lower', vmin=_vmin, vmax=_vmax)
                         axs[idx].set_aspect('equal', adjustable='box')
                         for spine in axs[idx].spines.values():
                             spine.set_linewidth(spine_thickness)
@@ -1078,7 +1140,7 @@ class EpiComparison:
                             axs[idx].spines['bottom'].set_visible(False)
                             if subtitle:
                                 axs[idx].set_title(subtitle, fontsize=7, color=color, fontweight='bold', pad=2)
-                        elif idx == len(range_slices) - 1:
+                        elif idx == n_slices_total - 1:
                             axs[idx].spines['top'].set_visible(False)
                             axs[idx].spines['bottom'].set_edgecolor(color)
                         else:
@@ -1090,25 +1152,20 @@ class EpiComparison:
                             axs[idx].text(0.1, 0.9, vert_level, color='white', fontsize=5, fontweight='bold',
                                           ha='center', va='center', transform=axs[idx].transAxes)
 
+                if has_gre:
+                    _draw_panel(axs_gre, img_gre, pam50_cord_data, factor_3mm, n_max_panels, color_gre,
+                                subtitle='GRE\n(T2*w)', vmin_img=vmin_gre, vmax_img=vmax_gre,
+                                explicit_slices=gre_slices)
                 _draw_panel(axs_baseline, img_baseline, mask_baseline, factor_3mm, n_panels_3mm, color_baseline,
                             subtitle='3mm\nshimBase', show_level=True, warp=fname_warp_pam50_to_base,
                             fname_img=fname_baseline, task=task_3mm, acq=name_baseline)
                 _draw_panel(axs_slicewise, img_slicewise, mask_slicewise, factor_3mm, n_panels_3mm, color_slicewise,
                             subtitle='3mm\nshimSlice')
-                _draw_panel(axs_base_avg, img_base_avg, mask_base_avg, factor_avg, n_panels_avg, color_base_avg,
-                            subtitle='1mm+avg\nshimBase')
-                _draw_panel(axs_slice_avg, img_slice_avg, mask_slice_avg, factor_avg, n_panels_avg, color_slice_avg,
-                            subtitle='1mm+avg\nshimSlice')
-
-                if i_id == 0:
-                    legend_fontsize = 8
-                    legend_elements = [
-                        Patch(facecolor='white', edgecolor=color_baseline, label='3mm shimBase', linewidth=1.5),
-                        Patch(facecolor='white', edgecolor=color_slicewise, label='3mm shimSlice', linewidth=1.5),
-                        Patch(facecolor='white', edgecolor=color_base_avg, label='1mm+avg shimBase', linewidth=1.5),
-                        Patch(facecolor='white', edgecolor=color_slice_avg, label='1mm+avg shimSlice', linewidth=1.5),
-                    ]
-                    axs_baseline[-1].legend(handles=legend_elements, loc=(0, -1.2), fontsize=legend_fontsize)
+                if has_avg:
+                    _draw_panel(axs_base_avg, img_base_avg, mask_base_avg, factor_avg, n_panels_avg, color_base_avg,
+                                subtitle='1mm+avg\nshimBase')
+                    _draw_panel(axs_slice_avg, img_slice_avg, mask_slice_avg, factor_avg, n_panels_avg, color_slice_avg,
+                                subtitle='1mm+avg\nshimSlice')
 
                 if ID in highlight:
                     range_slices_3mm = list(range(img_baseline.shape[2] - 1, -1, -factor_3mm))
