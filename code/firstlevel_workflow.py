@@ -141,7 +141,8 @@ for ID_nb, ID in enumerate(IDs):
                 if denoised_candidates:
                     denoised_fmri = denoised_candidates[0]
                 else:
-                    moco_candidates = glob.glob(os.path.join(preprocessing_dir.format(ID), 'func', tag, 'sct_fmri_moco', f'sub-{ID}_{tag}_bold_moco.nii.gz'))
+                    run_suffix = f"_{run_name}" if run_name else ""
+                    moco_candidates = glob.glob(os.path.join(preprocessing_dir.format(ID), 'func', tag, 'sct_fmri_moco', f'sub-{ID}_{tag}{run_suffix}_bold_moco.nii.gz'))
                     if not moco_candidates:
                         print(f"WARNING: No denoised or moco file found for sub-{ID} {tag}, skipping.", flush=True)
                         continue
@@ -212,7 +213,106 @@ for ID_nb, ID in enumerate(IDs):
                             threshold=0.1,
                             verbose=False,
                             redo=redo)[0])
-    
+
+        #------ I.4 Derived acquisitions (e.g., smooth3mm): run GLM using source events file
+        for derived_acq_name, acq_info in config.get("derived_acq", {}).items():
+            if "smooth_width" not in acq_info:
+                continue  # skip avg3mm; only process smooth3mm (used for group analysis)
+            source_acq = acq_info["source_acq"]
+            tag = "task-" + task_name + "_acq-" + derived_acq_name
+            tag_source = "task-" + task_name + "_acq-" + source_acq
+
+            # Moco file (pick longest run if multiple exist)
+            moco_candidates = sorted(glob.glob(os.path.join(
+                preprocessing_dir.format(ID), 'func', tag,
+                'sct_fmri_moco', f'sub-{ID}_{tag}*_bold_moco.nii.gz'
+            )))
+            if not moco_candidates:
+                print(f"INFO: No moco file for sub-{ID} {tag}, skipping.", flush=True)
+                continue
+            denoised_fmri = max(moco_candidates, key=lambda f: nib.load(f).shape[3])
+
+            match = re.search(r"_?(run-\d+)", denoised_fmri)
+            run_name = match.group(1) if match else ""
+
+            cord_seg_file = os.path.join(
+                preprocessing_dir.format(ID), 'func', tag,
+                f"sub-{ID}_{tag}_bold_moco_mean_seg.nii.gz"
+            )
+            if not os.path.exists(cord_seg_file):
+                print(f"WARNING: No SC mask for sub-{ID} {tag}, skipping.", flush=True)
+                continue
+
+            warp_file = os.path.join(
+                preprocessing_dir.format(ID), 'func', tag,
+                f"sub-{ID}_{tag}_from-func_to_PAM50_mode-image_xfm.nii.gz"
+            )
+            if not os.path.exists(warp_file):
+                print(f"WARNING: No warp file for sub-{ID} {tag}, skipping.", flush=True)
+                continue
+
+            # Events file: reuse the source acquisition's events file
+            events_candidates = glob.glob(os.path.join(
+                config["raw_dir"], f'sub-{ID}', 'func',
+                f'sub-{ID}_{tag_source}_*{run_name}*events.tsv'
+            ))
+            if not events_candidates:
+                print(f"WARNING: No events for sub-{ID} {tag_source} run={run_name}, skipping.", flush=True)
+                continue
+            events_file = events_candidates[0]
+
+            # TR from source acquisition's BIDS JSON (derived acq has no sidecar)
+            import json as _json
+            source_json = os.path.join(
+                config["raw_dir"], f'sub-{ID}', 'func',
+                f'sub-{ID}_{tag_source}{("_" + run_name) if run_name else ""}_bold.json'
+            )
+            if not os.path.exists(source_json):
+                # fallback: any JSON for source acq
+                source_json_candidates = glob.glob(os.path.join(
+                    config["raw_dir"], f'sub-{ID}', 'func',
+                    f'sub-{ID}_{tag_source}*_bold.json'
+                ))
+                if not source_json_candidates:
+                    print(f"WARNING: No JSON for sub-{ID} {tag_source}, skipping.", flush=True)
+                    continue
+                source_json = source_json_candidates[0]
+            with open(source_json) as _f:
+                source_tr = _json.load(_f).get("RepetitionTime")
+
+            stat_maps = glm_ana.run_first_level_glm(
+                ID=ID, i_fname=denoised_fmri, events_file=events_file,
+                mask_file=cord_seg_file, task_name=tag, run_name=run_name,
+                redo=redo, verbose=verbose, tr=source_tr
+            )
+
+            for i, contrast_fname in enumerate(stat_maps):
+                corr_type = "fpr"; alpha = 0.01; cluster = 0
+                fname_thr_img = stat_maps[i].split(".")[0] + f"_{corr_type}_{str(alpha)[2:]}_{str(cluster)}cluster.nii.gz"
+                if not os.path.exists(fname_thr_img) or redo:
+                    thresholded_map, threshold = threshold_stats_img(
+                        stat_maps[i], alpha=alpha,
+                        height_control=corr_type, cluster_threshold=cluster, two_sided=False
+                    )
+                    thresholded_map.to_filename(fname_thr_img)
+
+            for i, contrast_fname in enumerate(stat_maps):
+                preprocess_Sc.apply_warp(
+                    i_img=[stat_maps[i]], ID=[ID],
+                    o_folder=[os.path.dirname(stat_maps[i])],
+                    dest_img=os.path.join(path_code, "template", config["PAM50_t2"]),
+                    warping_field=warp_file, tag="_inTemplate",
+                    mean=False, n_jobs=1, verbose=False, redo=redo
+                )
+
+            norm_mask.append(preprocess_Sc.apply_warp(
+                i_img=[cord_seg_file], ID=[ID],
+                o_folder=[os.path.dirname(stat_maps[i])],
+                dest_img=os.path.join(path_code, "template", config["PAM50_t2"]),
+                warping_field=warp_file, tag="_inTemplate",
+                mean=False, n_jobs=1, threshold=0.1, verbose=False, redo=redo
+            )[0])
+
     print(f'=== First level done for : {ID} ===', flush=True)
     print("=========================================", flush=True)
     print("")
