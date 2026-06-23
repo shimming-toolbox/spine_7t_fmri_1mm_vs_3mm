@@ -13,6 +13,7 @@ RUN_DENOISING=false
 RUN_FIRSTLEVEL=false
 RUN_SECONDLEVEL=false
 RUN_FIGURES=false
+RUN_COMPARE=false
 REDO=false
 
 # Parse arguments
@@ -26,6 +27,7 @@ while [[ $# -gt 0 ]]; do
         --denoising) RUN_DENOISING=true; shift;;
         --firstlevel) RUN_FIRSTLEVEL=true; shift;;
         --secondlevel) RUN_SECONDLEVEL=true; shift;;
+        --compare) RUN_COMPARE=true; shift;;
         --redo) REDO=true; shift;;
       *) echo "Unknown argument $1"; exit 1 ;;
     esac
@@ -35,9 +37,10 @@ if [ "${RUN_PREPROSS}" = false ] && \
    [ "${RUN_DENOISING}" = false ] && \
    [ "${RUN_FIRSTLEVEL}" = false ] && \
    [ "${RUN_SECONDLEVEL}" = false ] && \
-   [ "${RUN_FIGURES}" = false ]; then
+   [ "${RUN_FIGURES}" = false ] && \
+   [ "${RUN_COMPARE}" = false ]; then
     echo "ERROR: No processing step selected."
-    echo "Use --preprocess, --denoising, --firstlevel and/or  --secondlevel"
+    echo "Use --preprocess, --denoising, --firstlevel, --secondlevel and/or --compare"
     exit 1
 fi
 
@@ -133,4 +136,21 @@ if [ "${RUN_SECONDLEVEL}" = true ]; then
     echo "kill ${PID}"
     wait ${PID}
     echo "Finished second level analysis!"
+fi
+
+# --------------------------
+# Run quantitative comparison (1mm vs 3mm)
+# --------------------------
+if [ "${RUN_COMPARE}" = true ]; then
+    echo "Starting 1mm vs 3mm comparison..."
+    nohup ${PYTHON} -u ../code/compare_workflow.py --path-data "${PATH_DATA}" --ids "${IDs[@]}" "${TASKS_ARG[@]}" --redo "${REDO}" \
+    > "nohup_compare_${timestamp}.txt" 2>&1 &
+
+    PID=$!
+    echo "Comparison launched in background."
+    echo "Log file: log/nohup_compare_${timestamp}.txt"
+    echo "To stop the process, run:"
+    echo "kill ${PID}"
+    wait ${PID}
+    echo "Finished comparison!"
 fi
