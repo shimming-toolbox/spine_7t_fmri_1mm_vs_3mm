@@ -74,18 +74,25 @@ timestamp=$(date +"%Y%m%d_%H%M%S")
 # Run preprocessing
 # --------------------------
 
-if [ "${RUN_PREPROSS}" = true ]; then
-    echo "Starting preprocessing..."
-    nohup ${PYTHON} -u ../code/preprocessing_workflow.py --path-data "${PATH_DATA}"  --ids "${IDs[@]}" "${TASKS_ARG[@]}" --redo "${REDO}" \
-    > "nohup_preprocessing_${timestamp}.txt" 2>&1 &
+run_step() {
+    local label="$1"; local logfile="$2"; shift 2
+    echo ""
+    echo "=== Starting ${label} === (log: log/${logfile})"
+    # Run directly (no nohup/&): screen handles disconnection.
+    # tee shows output live in screen AND saves to the log file.
+    "$@" 2>&1 | tee "${logfile}"
+    local rc=${PIPESTATUS[0]}
+    if [ "${rc}" -ne 0 ]; then
+        echo ""
+        echo "ERROR: ${label} failed (exit code ${rc}). Stopping pipeline."
+        exit "${rc}"
+    fi
+    echo "=== ${label} done ==="
+}
 
-    PID=$!
-    echo "Preprocessing launched in background."
-    echo "Log file: log/nohup_preprocessing_${timestamp}.txt"
-    echo "To stop the process, run:"
-    echo "kill ${PID}"
-    wait ${PID}
-    echo "Finished preprocessing!"
+if [ "${RUN_PREPROSS}" = true ]; then
+    run_step "Preprocessing" "nohup_preprocessing_${timestamp}.txt" \
+        ${PYTHON} -u ../code/preprocessing_workflow.py --path-data "${PATH_DATA}" --ids "${IDs[@]}" "${TASKS_ARG[@]}" --redo "${REDO}"
 fi
 
 # --------------------------
@@ -93,17 +100,8 @@ fi
 # --------------------------
 
 if [ "${RUN_DENOISING}" = true ]; then
-    echo "Starting denoising..."
-    nohup ${PYTHON} -u ../code/denoising_workflow.py --path-data "${PATH_DATA}" --ids "${IDs[@]}" "${TASKS_ARG[@]}" --redo "${REDO}" \
-    > "nohup_denoising_${timestamp}.txt" 2>&1 &
-    
-    PID=$!
-    echo "Denoising launched in background."
-    echo "Log file: log/nohup_denoising_${timestamp}.txt"
-    echo "To stop the process, run:"
-    echo "kill ${PID}"
-    wait ${PID}
-    echo "Finished denoising!"
+    run_step "Denoising" "nohup_denoising_${timestamp}.txt" \
+        ${PYTHON} -u ../code/denoising_workflow.py --path-data "${PATH_DATA}" --ids "${IDs[@]}" "${TASKS_ARG[@]}" --redo "${REDO}"
 fi
 
 # --------------------------
@@ -111,49 +109,22 @@ fi
 # --------------------------
 
 if [ "${RUN_FIRSTLEVEL}" = true ]; then
-    echo "Starting first level analysis..."
-    nohup ${PYTHON} -u ../code/firstlevel_workflow.py --path-data "${PATH_DATA}" --ids "${IDs[@]}" "${TASKS_ARG[@]}" --redo "${REDO}" \
-    > "nohup_firstlevel_${timestamp}.txt" 2>&1 &
-
-    PID=$!
-    echo "First level analysis launched in background."
-    echo "Log file: log/nohup_firstlevel_${timestamp}.txt"
-    echo "To stop the process, run:"
-    echo "kill ${PID}"
-    wait ${PID}
-    echo "Finished first level analysis!"
+    run_step "First level analysis" "nohup_firstlevel_${timestamp}.txt" \
+        ${PYTHON} -u ../code/firstlevel_workflow.py --path-data "${PATH_DATA}" --ids "${IDs[@]}" "${TASKS_ARG[@]}" --redo "${REDO}"
 fi
 
 # --------------------------
 # Run second level analysis
 # --------------------------
 if [ "${RUN_SECONDLEVEL}" = true ]; then
-    echo "Starting second level analysis..."
-    nohup ${PYTHON} -u ../code/secondlevel_workflow.py --path-data "${PATH_DATA}" --ids "${IDs[@]}" "${TASKS_ARG[@]}" --redo "${REDO}" \
-    > "nohup_secondlevel_${timestamp}.txt" 2>&1 &
-
-    PID=$!
-    echo "second level analysis launched in background."
-    echo "Log file: log/nohup_secondlevel_${timestamp}.txt"
-    echo "To stop the process, run:"
-    echo "kill ${PID}"
-    wait ${PID}
-    echo "Finished second level analysis!"
+    run_step "Second level analysis" "nohup_secondlevel_${timestamp}.txt" \
+        ${PYTHON} -u ../code/secondlevel_workflow.py --path-data "${PATH_DATA}" --ids "${IDs[@]}" "${TASKS_ARG[@]}" --redo "${REDO}"
 fi
 
 # --------------------------
 # Run quantitative comparison (1mm vs 3mm)
 # --------------------------
 if [ "${RUN_COMPARE}" = true ]; then
-    echo "Starting 1mm vs 3mm comparison..."
-    nohup ${PYTHON} -u ../code/compare_workflow.py --path-data "${PATH_DATA}" --ids "${IDs[@]}" "${TASKS_ARG[@]}" --redo "${REDO}" \
-    > "nohup_compare_${timestamp}.txt" 2>&1 &
-
-    PID=$!
-    echo "Comparison launched in background."
-    echo "Log file: log/nohup_compare_${timestamp}.txt"
-    echo "To stop the process, run:"
-    echo "kill ${PID}"
-    wait ${PID}
-    echo "Finished comparison!"
+    run_step "1mm vs 3mm comparison" "nohup_compare_${timestamp}.txt" \
+        ${PYTHON} -u ../code/compare_workflow.py --path-data "${PATH_DATA}" --ids "${IDs[@]}" "${TASKS_ARG[@]}" --redo "${REDO}"
 fi
