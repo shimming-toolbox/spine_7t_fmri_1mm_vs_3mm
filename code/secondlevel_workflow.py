@@ -179,6 +179,8 @@ print("")
 
 common_mask_fname = os.path.join(first_level_dir.split("sub")[0], "common_mask_PAM50.nii.gz").format("glm")
 
+import time as _time
+
 values_csv_pair={};metrics_csv_pair={}
 for cluster_corr in [0.01,0.001]:
     values_csv_pair[cluster_corr]={};metrics_csv_pair[cluster_corr]={}
@@ -202,6 +204,9 @@ for cluster_corr in [0.01,0.001]:
                     print(f"WARNING: Only {len(i_fnames)} subject(s) for {tag} — need at least 2 for second-level GLM, skipping.", flush=True)
                     continue
 
+                _t_task = _time.time()
+                print(f"--- Starting second-level GLM: {tag} | cluster_corr={cluster_corr} vox_thr={vox_thr} | N={len(i_fnames)} subjects ---", flush=True)
+
                 z_map_file = glm_ana.run_second_level_glm(i_fnames=i_fnames,
                                                                 mask_fname=common_mask_fname,
                                                                 task_name=tag,
@@ -218,9 +223,9 @@ for cluster_corr in [0.01,0.001]:
                 values_csv_pair[cluster_corr][vox_thr].append(values_csv)
 
                 print(metrics_csv_pair)
-                                                    
+
                 print("")
-                print(f'=== Second level done for : {tag}, cluster: {cluster_corr} vox: {vox_thr} ===', flush=True)
+                print(f'=== Second level done for : {tag}, cluster: {cluster_corr} vox: {vox_thr} | elapsed: {_time.time()-_t_task:.1f}s ===', flush=True)
                 print("=========================================", flush=True)
 
 #------------------------------------------------------------------

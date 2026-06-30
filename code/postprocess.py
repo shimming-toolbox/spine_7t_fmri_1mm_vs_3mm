@@ -325,6 +325,13 @@ class GLM_main:
             raise ValueError("Please provide the list of filenames of the input contrast images.")
         
         # --- Define directories  -----------------------------------------------------------
+        # Raw permutation results depend only on vox_thr/n_perm (NOT on cluster_corr), so
+        # they are cached in a shared folder and reused across different cluster_corr values.
+        raw_perm_dir = os.path.join(self.second_level_dir.format("glm"), f"vox{vox_thr}_perm{n_perm}", task_name)
+        os.makedirs(raw_perm_dir, exist_ok=True)
+        raw_stat_map_file = os.path.join(raw_perm_dir, f"n{len(i_fnames)}_{task_name}_")
+
+        # cluster_corr only affects the post-hoc masking step, so the corrected map lives here
         second_level_dir = os.path.join(self.second_level_dir.format("glm"), f"cluster_p{cluster_corr}_vox{vox_thr}_perm{n_perm}", task_name)
         os.makedirs(second_level_dir, exist_ok=True)
 
@@ -339,21 +346,25 @@ class GLM_main:
                 # --- Estimate and Fit second-level model -----------------------------------------------------------
                 second_level_model = SecondLevelModel(mask_img=mask_fname,smoothing_fwhm=smoothing_fwhm, n_jobs=2, verbose=1) # define the model to the contrast images and the design matrix
                 second_level_model.fit(i_fnames, design_matrix=design_matrix)  # fit the model to the contrast images and the design matrix
-                
+
                 # --- Compute contrasts and save -----------------------------------------------------------
                 z_map = second_level_model.compute_contrast(second_level_contrast="intercept",output_type="z_score")
                 z_map.to_filename(stat_map_file)
-        
+
         else:
-            stat_map_file = os.path.join(second_level_dir, f"n{len(i_fnames)}_{task_name}_")
-            if not os.path.exists(stat_map_file + 'logp_max_t.nii.gz') or redo:
+            corr_map_file = os.path.join(second_level_dir, f"n{len(i_fnames)}_{task_name}_t_clustercorrected.nii.gz")
+
+            # Run 10000-permutation inference only if the cached raw results don't exist yet
+            if not os.path.exists(raw_stat_map_file + 'logp_max_t.nii.gz') or redo:
+                import time as _time
+                _t0 = _time.time()
                 print(f"Computing non-parametric second-level analysis for task {task_name} with {n_perm} permutations.")
                 out_dict = non_parametric_inference(
                     i_fnames,
                     design_matrix=design_matrix,
                     mask=mask_fname,
                     model_intercept=True,
-                    n_perm=n_perm, 
+                    n_perm=n_perm,
                     two_sided_test=False,
                     smoothing_fwhm=smoothing_fwhm,
                     n_jobs=n_jobs,
@@ -361,27 +372,22 @@ class GLM_main:
                     tfce=False,
                     verbose=1,
                     )
-                
-                out_dict["t"].to_filename(stat_map_file+ 't.nii.gz')
-                out_dict["logp_max_t"].to_filename(stat_map_file+ 'logp_max_t.nii.gz')
-                out_dict["logp_max_size"].to_filename(stat_map_file+ 'logp_max_size.nii.gz')
-                out_dict["logp_max_mass"].to_filename(stat_map_file+ 'logp_max_mass.nii.gz')
-                #out_dict["tfce"].to_filename(stat_map_file+ 'tfce.nii.gz')
-                #out_dict["logp_max_tfce"].to_filename(stat_map_file+ 'logp_max_tfce.nii.gz')
+                out_dict["t"].to_filename(raw_stat_map_file + 't.nii.gz')
+                out_dict["logp_max_t"].to_filename(raw_stat_map_file + 'logp_max_t.nii.gz')
+                out_dict["logp_max_size"].to_filename(raw_stat_map_file + 'logp_max_size.nii.gz')
+                out_dict["logp_max_mass"].to_filename(raw_stat_map_file + 'logp_max_mass.nii.gz')
+                print(f"Non-parametric inference done in {_time.time() - _t0:.1f}s (wall clock)", flush=True)
 
-                #mask the t-map with the significant cluster in the logp_max_size map
-                logp_max_size_img = nib.load(stat_map_file+ 'logp_max_size.nii.gz')
-                logp_max_size_data = logp_max_size_img.get_fdata()
-                #threshold the logp_max_size map at cluster_corr
+            # Apply cluster_corr threshold (cheap — reuses cached raw maps)
+            if not os.path.exists(corr_map_file) or redo:
+                logp_max_size_data = nib.load(raw_stat_map_file + 'logp_max_size.nii.gz').get_fdata()
                 logp_max_size_data_thresholded = logp_max_size_data > -np.log10(cluster_corr)
-                #mask the t-map with the thresholded logp_max_size map
-                t_img = nib.load(stat_map_file+ 't.nii.gz')
-                t_data = t_img.get_fdata()
-                t_data_masked = t_data * logp_max_size_data_thresholded
+                t_img = nib.load(raw_stat_map_file + 't.nii.gz')
+                t_data_masked = t_img.get_fdata() * logp_max_size_data_thresholded
                 t_masked_img = nib.Nifti1Image(t_data_masked, t_img.affine, t_img.header)
-                t_masked_img.to_filename(stat_map_file+ 't_clustercorrected.nii.gz')
+                t_masked_img.to_filename(corr_map_file)
 
-        return stat_map_file+ 't_clustercorrected.nii.gz'
+        return corr_map_file
 
     def extract_metrics(self,i_fname=None,threshold=0,o_fname=None,redo=False):
         
