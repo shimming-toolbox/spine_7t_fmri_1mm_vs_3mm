@@ -70,6 +70,10 @@ cd log || { echo "ERROR: could not cd into log/"; exit 1; }
 
 timestamp=$(date +"%Y%m%d_%H%M%S")
 
+# Save the full invocation so it can be recovered after a crash (cat log/last_run.sh)
+echo "bash $(realpath "$0") $*" > last_run.sh
+echo "# Run on: $(date)" >> last_run.sh
+
 # --------------------------
 # Run preprocessing
 # --------------------------
