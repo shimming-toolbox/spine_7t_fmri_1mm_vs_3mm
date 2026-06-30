@@ -1,6 +1,6 @@
 #!/bin/bash
 # Keep the screen window open after the script exits (success or error) so logs can be reviewed.
-trap 'echo ""; echo "=== Script exited (code $?). Type '\''exit'\'' to close screen. ==="; exec bash' EXIT
+trap 'echo ""; echo "=== Script exited (code $?). Type '\''exit'\'' to close screen. ==="; bash' EXIT
 
 # --------------------------
 # User parameters

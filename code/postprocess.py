@@ -520,6 +520,8 @@ class TSNR_main:
         space: str
             choose the option "native" or "PAM50"
         """
+        os.makedirs(self.path_tsnr, exist_ok=True)
+        os.makedirs(self.path_tsnr_inTemplate, exist_ok=True)
         dfs= {
             "tsnr": pd.DataFrame(columns=["IDs", "task", "acq", "tsnr"]),
             "ssnr": pd.DataFrame(columns=["IDs", "task", "acq", "ssnr"])
