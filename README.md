@@ -99,9 +99,11 @@ preprocess  →  firstlevel  →  secondlevel  →  compare
 bash "${PATH_CODE}/code/run_all_processing.sh" \
   --path-data "${PATH_DATA}" \
   --path-code "${PATH_CODE}" \
-  --tasks motor \
   --preprocess --firstlevel --secondlevel --compare
 ```
+
+> [!NOTE]
+> Do not restrict to `--tasks motor` here. Some acquisitions (shimBase+3mm, shimBase+1mm+sms2) were collected during the **rest** task and are needed for tSNR and image-quality comparisons.
 
 To process a subset of subjects, add `--ids`:
 ```bash
@@ -109,7 +111,6 @@ bash "${PATH_CODE}/code/run_all_processing.sh" \
   --path-data "${PATH_DATA}" \
   --path-code "${PATH_CODE}" \
   --ids 099 100 101 \
-  --tasks motor \
   --preprocess --firstlevel --secondlevel --compare
 ```
 
