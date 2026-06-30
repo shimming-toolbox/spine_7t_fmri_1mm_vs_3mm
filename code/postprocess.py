@@ -547,7 +547,7 @@ class TSNR_main:
                     if selected_file is None:
                         continue
 
-                    selected_mean_file = selected_file.split('.')[0] + "_mean.nii.gz"
+                    selected_mean_file = selected_file[:-len(".nii.gz")] + "_mean.nii.gz"
 
                     # Compute tSNR map in native space
                     path_tsnr_sub_folder = os.path.join(self.path_tsnr, f"sub-{ID}", tag)
