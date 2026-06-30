@@ -78,7 +78,7 @@ See: https://openneuro.org/datasets/ds007932/download
 │   │       │           │   │   ...
 │   │       │           └── task-motor_acq-shimSlice+3mm
 │   │       │               ...
-│   │       └── ...  # Other processing steps (denoising, first-level analysis, etc)
+│   │       └── ...  # Other processing steps (first-level analysis, etc)
 │   ├── dataset_description.json
 │   ├── sub-100
 │   │   ├── anat
@@ -218,38 +218,16 @@ bash "${PATH_CODE}/code/run_all_processing.sh" --path-data "${PATH_DATA}" --path
 ##### ‼️ What we want to try to improve
 > - **IV. Registration to template:** 
 
-### 2.2 Denoising  🧹
-
+### 2.2 First-level Analysis 📈
 Should be run after preprocessing.
-- ⚠️ csf segmentation should be checked and manually corrected if needed before running the denoising.
-
-#### Description of the denoising steps
-- **I. Extract motion parameters:** to regressed out the residual motion effects, we extracted slice-wise motion parameters from the moco files generated during the motion correction step.
-- **II. Compute outliers calculation:** to identify volumes with excessive motionas and included as nuisance regressors in the denoising step.
-- **III. CompCor calculation:** to eliminate the non-neural aspects of the signal, we used the CompCor (Behzadi et al., 2007) approach by extracting the mean signal and the first five principal components of the unsmoothed signal recorded from the CSF (CSF-mask in functional space).
-- **IV. Signal cleaning:** we regressed out the nuisance regressors (motion parameters, outliers, mean CSF signal and first five principal components from the CSF) and applied a high-pass temporal filter (cut-off frequency = 0.01 Hz) to the functional data.
-
-#### Run denoising
-- Runs preprocessing steps automatically with output log from STDOUT.
-- By default, the steps are not rerun if some outputs already exist.
-- If you already have setup `PATH_CODE` and `PATH_DATA`, you don't need to specify `--path-data` and `--path-code`.
-- Specify individuals to process (`--ids 101 106`) or `IDs=(101 106)` and (`--ids "${IDs[@]}"`) , the default option run preprocessing on all participants in the `participants.tsv`. Specify task to denoise (`--tasks` `motor` or `rest`), the default option run denoising on all tasks defined in the `config_file_7t_fmri.json`.
-
-```bash
-bash "${PATH_CODE}/code/run_all_processing.sh" --path-data "${PATH_DATA}" --path-code "${PATH_CODE}" --ids "${IDs[@]}" --tasks motor --denoising
-
-```
-
-### 2.3 First-level Analysis 📈
-Should be run after preprocessing and denoising.
 
 #### Description of the first-level analysis
-- **I. Run first level GLM:** to estimate the activation maps for each condition of interest (e.g., motor task vs rest) using the events files and the denoised functional data. The design matrix includes the conditions of interest.
+- **I. Run first level GLM:** to estimate the activation maps for each condition of interest (e.g., motor task vs rest) using the events files and the motion-corrected functional data. The design matrix includes the conditions of interest.
 - **II. Normalize the resulting stat maps to PAM50 template space:** to allow for group-level analyses, we normalized the resulting stat maps to the PAM50 template space using the warps generated during the preprocessing step.
 
 #### Run first-level analysis
 - If you already have setup `PATH_CODE` and `PATH_DATA`, you don't need to specify `--path-data` and `--path-code`.
-- Specify individuals to process (`--ids 101 106`) or `IDs=(101 106)` and (`--ids "${IDs[@]}"`) , the default option run preprocessing on all participants in the `participants.tsv`. Specify task to analyse (`--tasks` `motor`), the default option run denoising on all tasks defined in the `config_file_7t_fmri.json` but for this protocol you shoul specify motor task only.
+- Specify individuals to process (`--ids 101 106`) or `IDs=(101 106)` and (`--ids "${IDs[@]}"`) , the default option run preprocessing on all participants in the `participants.tsv`. Specify task to analyse (`--tasks` `motor`), the default option runs first-level analysis on all tasks defined in the `config_file_7t_fmri.json` but for this protocol you should specify motor task only.
 - You add `--firstlevel` to run first level analysis.
 
 ```bash
@@ -257,7 +235,7 @@ bash "${PATH_CODE}/code/run_all_processing.sh" --path-data "${PATH_DATA}" --path
 
 ```
 
-### 2.4 Second-level Analysis 📊
+### 2.3 Second-level Analysis 📊
 
 Should be run after first-level analysis. Performs group-level statistics and reproducibility analyses.
 
@@ -274,7 +252,7 @@ Should be run after first-level analysis. Performs group-level statistics and re
 bash "${PATH_CODE}/code/run_all_processing.sh" --path-data "${PATH_DATA}" --path-code "${PATH_CODE}" --ids "${IDs[@]}" --tasks motor --secondlevel
 ```
 
-### 2.5 Figure generation 🖼️
+### 2.4 Figure generation 🖼️
 
 > [!NOTE]
 > A dedicated `figures_workflow.py` script is planned (see [issue #21](https://github.com/shimming-toolbox/spine_7t_fmri_1mm_vs_3mm/issues/21)). Currently, figures are generated automatically at the end of the first-level and second-level workflows.
