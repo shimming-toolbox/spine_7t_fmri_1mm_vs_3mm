@@ -180,30 +180,6 @@ class GLM_main:
                 results.to_filename(stat_maps[i])
         
         return stat_maps
-    
-
-        files = glob.glob(os.path.join(
-            self.raw_dir,
-            self.config["preprocess_dir"]["main_dir"].format(ID),
-            "func",
-            f"task-{task}_acq-{acq_name}",
-            "sct_fmri_moco",
-            f"sub-{ID}_task-{task}_acq-{acq_name}*_bold_moco.nii.gz"
-        ))
-        if len(files) == 0:
-            return None
-        elif len(files) == 1:
-            selected_file = files[0]
-        else:
-            max_volumes = 0
-            selected_file = None
-            for f in files:
-                img = nib.load(f)
-                n_volumes = img.shape[3]
-                if n_volumes > max_volumes:
-                    max_volumes = n_volumes
-                    selected_file = f
-        return selected_file
 
     def run_icc(self, IDs=None, i_fnames=None, o_dir=None, mask_file=None, threshold=0, fwhm=[1,1,1],redo=False):
         
@@ -529,18 +505,13 @@ class TSNR_main:
 
         print("=== Compute tSNR map on longest moco neighbour run ===", flush=True)
         # Find the minimum number of volumes across all runs to standardize tSNR calculation
-        min_vols_for_tsnr = 1000
-        for ID in self.IDs:
-            for task in self.config["design_exp"]["task_names"]:
-                for acq_name in self.config["design_exp"]["acq_names"]:
-                    selected_file = self.find_moco_for_tsnr_calculation(ID, task, acq_name)
-                    if selected_file is None:
-                        continue
-                    n_vols = nib.load(selected_file).shape[3]
-                    if n_vols < min_vols_for_tsnr:
-                        min_vols_for_tsnr = n_vols
+        max_vols_for_tsnr = find_max_volume_common_to_all_runs(self.IDs,
+                                                               self.config["design_exp"]["task_names"],
+                                                               self.config["design_exp"]["acq_names"],
+                                                               self.config,
+                                                               mod_to_return="moco")
 
-        print(f"Minimum number of volumes across all runs: {min_vols_for_tsnr}", flush=True)
+        print(f"Minimum number of volumes across all runs: {max_vols_for_tsnr}", flush=True)
         # Minimum number of volumes across all runs: 60 (2026-04-07)
 
         # Compute_tsnr
@@ -551,7 +522,7 @@ class TSNR_main:
                 for acq_name in self.config["design_exp"]["acq_names"]:
                     tag = "task-" + task + "_acq-" + acq_name
 
-                    selected_file = self.find_moco_for_tsnr_calculation(ID, task, acq_name)
+                    selected_file, _ = get_fname_with_max_volumes(ID, task, acq_name, self.config, "moco")
                     if selected_file is None:
                         continue
 
@@ -559,7 +530,7 @@ class TSNR_main:
 
                     # Compute tSNR map in native space
                     path_tsnr_sub_folder = os.path.join(self.path_tsnr, f"sub-{ID}", tag)
-                    fname_tsnr = compute_tsnr_map(selected_file, path_tsnr_sub_folder, self.redo, min_vols_for_tsnr)
+                    fname_tsnr = compute_tsnr_map(selected_file, path_tsnr_sub_folder, self.redo, max_vols_for_tsnr)
 
                     # Segmentation file in native space
                     fname_mask = os.path.join(self.config["raw_dir"],self.config["preprocess_dir"]["main_dir"].format(ID),"func",tag,f"sub-{ID}_{tag}_bold_moco_mean_seg.nii.gz")
@@ -715,29 +686,18 @@ class TSNR_main:
 
         return fname_tsnr_avg
 
-    def find_moco_for_tsnr_calculation(self, ID, task, acq_name):
-        files = sorted(glob.glob(os.path.join(
-            self.config["raw_dir"],
-            self.config["preprocess_dir"]["main_dir"].format(ID),
-            "func",
-            f"task-{task}_acq-{acq_name}",
-            "sct_fmri_moco",
-            f"sub-{ID}_task-{task}_acq-{acq_name}*_bold_moco.nii.gz"
-        )))
-        if len(files) == 0:
-            return None
-        elif len(files) == 1:
-            selected_file = files[0]
-        else:
-            max_volumes = 0
-            selected_file = None
-            for f in files:
-                img = nib.load(f)
-                n_volumes = img.shape[3]
-                if n_volumes > max_volumes:
-                    max_volumes = n_volumes
-                    selected_file = f
-        return selected_file
+
+def find_max_volume_common_to_all_runs(IDs, tasks, acq_names, config, mod_to_return):
+    max_vols = 10000
+    for ID in IDs:
+        for task in tasks:
+            for acq_name in acq_names:
+                selected_file, n_vols = get_fname_with_max_volumes(ID, task, acq_name, config, mod_to_return)
+                if selected_file is None:
+                    continue
+                if n_vols < max_vols:
+                    max_vols = n_vols
+    return max_vols
 
     
 class EpiComparison:
@@ -1395,7 +1355,7 @@ def get_fname_with_max_volumes(ID, task, acq_name, config, mod_to_return="moco_m
     )))
 
     if len(fname_acq_list) == 0:
-        raise RuntimeError(f"No file found for sub-{ID} task-{task} acq-{acq_name}")
+        return None, None
 
     # take the one with more volumes
     vols = 0
