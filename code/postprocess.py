@@ -1023,9 +1023,11 @@ class EpiComparison:
                     if epi_pam50_cands:
                         epi_pam50_data = nib.load(sorted(epi_pam50_cands)[-1]).get_fdata()
                         nz = np.where((epi_pam50_data > 0).any(axis=(0, 1)))[0]
-                        gre_z_min, gre_z_max = int(nz[0]), int(nz[-1])
                     else:
                         nz = np.where(pam50_cord_data.any(axis=(0, 1)))[0]
+                    if len(nz) == 0:
+                        has_gre = False
+                    else:
                         gre_z_min, gre_z_max = int(nz[0]), int(nz[-1])
                     n_gre_z = gre_z_max - gre_z_min + 1
                     gre_step = max(1, round(n_gre_z / n_max_panels))
@@ -1408,6 +1410,8 @@ def create_mocomean_same_vols(ID, task, config, path_output, redo=False):
                                                                         mod_to_return="moco")
         fname_moco_shimslice, vols_shimslice = get_fname_with_max_volumes(ID, task, "shimSlice+3mm", config,
                                                                           mod_to_return="moco")
+        if fname_moco_shimbase is None or fname_moco_shimslice is None:
+            raise RuntimeError(f"Could not find moco file for sub-{ID} task-{task} (shimBase+3mm or shimSlice+3mm missing)")
 
         vols = min(vols_shimbase, vols_shimslice)
 
@@ -1431,7 +1435,7 @@ def create_mocomean_same_vols(ID, task, config, path_output, redo=False):
 def create_mocomean_derived(ID, name_baseline, name_slicewise, config, path_output, redo=False):
     """Copy moco_mean files for derived acquisitions (e.g. +avg3mm) to the figure data folder.
     No volume-matching is needed since derived acquisitions already represent one consistent series.
-    Task is auto-detected (rest is preferred, motor as fallback) per acquisition."""
+    Task is auto-detected (rest preferred, motor as fallback) per acquisition."""
     path_sub = os.path.join(path_output, f"sub-{ID}")
     os.makedirs(path_sub, exist_ok=True)
     for name in [name_baseline, name_slicewise]:
