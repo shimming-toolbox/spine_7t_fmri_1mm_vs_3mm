@@ -1,6 +1,6 @@
 #!/bin/bash
 # Keep the screen window open after the script exits (success or error) so logs can be reviewed.
-trap 'echo ""; echo "=== Script exited (code $?). Type '\''exit'\'' to close screen. ==="; exec bash' EXIT
+trap 'echo ""; echo "=== Script exited (code $?). Type '\''exit'\'' to close screen. ==="; bash' EXIT
 
 # --------------------------
 # User parameters
@@ -70,6 +70,10 @@ cd log || { echo "ERROR: could not cd into log/"; exit 1; }
 
 timestamp=$(date +"%Y%m%d_%H%M%S")
 
+# Save the full invocation so it can be recovered after a crash (cat log/last_run.sh)
+echo "bash $(realpath "$0") $*" > last_run.sh
+echo "# Run on: $(date)" >> last_run.sh
+
 # --------------------------
 # Run preprocessing
 # --------------------------
@@ -91,7 +95,7 @@ run_step() {
 }
 
 if [ "${RUN_PREPROSS}" = true ]; then
-    run_step "Preprocessing" "nohup_preprocessing_${timestamp}.txt" \
+    run_step "Preprocessing" "preprocessing_${timestamp}.txt" \
         ${PYTHON} -u ../code/preprocessing_workflow.py --path-data "${PATH_DATA}" --ids "${IDs[@]}" "${TASKS_ARG[@]}" --redo "${REDO}"
 fi
 
@@ -100,7 +104,7 @@ fi
 # --------------------------
 
 if [ "${RUN_DENOISING}" = true ]; then
-    run_step "Denoising" "nohup_denoising_${timestamp}.txt" \
+    run_step "Denoising" "denoising_${timestamp}.txt" \
         ${PYTHON} -u ../code/denoising_workflow.py --path-data "${PATH_DATA}" --ids "${IDs[@]}" "${TASKS_ARG[@]}" --redo "${REDO}"
 fi
 
@@ -109,7 +113,7 @@ fi
 # --------------------------
 
 if [ "${RUN_FIRSTLEVEL}" = true ]; then
-    run_step "First level analysis" "nohup_firstlevel_${timestamp}.txt" \
+    run_step "First level analysis" "firstlevel_${timestamp}.txt" \
         ${PYTHON} -u ../code/firstlevel_workflow.py --path-data "${PATH_DATA}" --ids "${IDs[@]}" "${TASKS_ARG[@]}" --redo "${REDO}"
 fi
 
@@ -117,7 +121,7 @@ fi
 # Run second level analysis
 # --------------------------
 if [ "${RUN_SECONDLEVEL}" = true ]; then
-    run_step "Second level analysis" "nohup_secondlevel_${timestamp}.txt" \
+    run_step "Second level analysis" "secondlevel_${timestamp}.txt" \
         ${PYTHON} -u ../code/secondlevel_workflow.py --path-data "${PATH_DATA}" --ids "${IDs[@]}" "${TASKS_ARG[@]}" --redo "${REDO}"
 fi
 
@@ -125,6 +129,6 @@ fi
 # Run quantitative comparison (1mm vs 3mm)
 # --------------------------
 if [ "${RUN_COMPARE}" = true ]; then
-    run_step "1mm vs 3mm comparison" "nohup_compare_${timestamp}.txt" \
+    run_step "1mm vs 3mm comparison" "compare_${timestamp}.txt" \
         ${PYTHON} -u ../code/compare_workflow.py --path-data "${PATH_DATA}" --ids "${IDs[@]}" "${TASKS_ARG[@]}" --redo "${REDO}"
 fi

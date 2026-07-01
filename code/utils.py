@@ -36,7 +36,7 @@ def tmean_img(ID=None, i_img=None, o_img=None, redo=False, verbose=False):
       
         # Select the default output directory (input directory) 
         if o_img is None:
-            o_img = i_img.split(".")[0] + "_tmean.nii.gz"
+            o_img = i_img[:-len(".nii.gz")] + "_tmean.nii.gz"
 
         # calculate the tmean:
         if not os.path.exists(o_img) or redo:

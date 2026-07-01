@@ -175,7 +175,7 @@ for ID_nb, ID in enumerate(IDs):
                     # Apply correction
                     corr_type="fpr";alpha=0.01;cluster=0
                     
-                    fname_thr_img=stat_maps[i].split(".")[0] +f"_{corr_type}_{str(alpha)[2:]}_{str(cluster)}cluster.nii.gz"
+                    fname_thr_img=stat_maps[i][:-len(".nii.gz")] +f"_{corr_type}_{str(alpha)[2:]}_{str(cluster)}cluster.nii.gz"
                     
                     if not os.path.exists(fname_thr_img) or redo:
                         thresholded_map, threshold = threshold_stats_img(stat_maps[i],
@@ -288,7 +288,7 @@ for ID_nb, ID in enumerate(IDs):
 
             for i, contrast_fname in enumerate(stat_maps):
                 corr_type = "fpr"; alpha = 0.01; cluster = 0
-                fname_thr_img = stat_maps[i].split(".")[0] + f"_{corr_type}_{str(alpha)[2:]}_{str(cluster)}cluster.nii.gz"
+                fname_thr_img = stat_maps[i][:-len(".nii.gz")] + f"_{corr_type}_{str(alpha)[2:]}_{str(cluster)}cluster.nii.gz"
                 if not os.path.exists(fname_thr_img) or redo:
                     thresholded_map, threshold = threshold_stats_img(
                         stat_maps[i], alpha=alpha,

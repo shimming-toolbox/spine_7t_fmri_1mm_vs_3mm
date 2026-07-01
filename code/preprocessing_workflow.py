@@ -450,10 +450,11 @@ for ID_nb, ID in enumerate(IDs):
                 acq_parameters.append(params)
 
                 # Full processing only for the first motor task, the others will be co-registered
-                if task_name == 'motor' and i_func == 0:
+                # ID 100 FOV for task-res is different than the task-motor FOV.
+                if (task_name == 'motor' and i_func == 0) or ID == "100":
                     epi_full_processing(ID, func_file, tag, manual_centerline, warpT2w_PAM50_files, params_moco, o_dir, redo, verbose)
                 else:
-                    # For other tasks (eg: rest), we will use the motor fMRI scan as a reference for creating the moco mask, 
+                    # For other tasks (eg: rest), we will use the motor fMRI scan as a reference for creating the moco mask,
                     # as a target for moco, and for segmentation and registration to PAM50.
                     # See discussion: https://github.com/CarolineLndl/spine_7t_fmri_analysis/issues/64
                     # See discussion: https://github.com/CarolineLndl/spine_7t_fmri_analysis/issues/82
