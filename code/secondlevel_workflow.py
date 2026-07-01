@@ -163,6 +163,7 @@ for acq_name in config["design_exp"]["acq_names"]:
 postprocess.pair_ttest(
     csv_files=fd_files,
     value_col='mean_FD',
+    conds=[('shimSlice+3mm', 'shimSlice+1mm+sms2')],
     acq_col='acq',
     task_filter=None, task_col=None,
     output_fname=output_file.split('.csv')[0]+"_stats.csv", redo=True)
