@@ -81,7 +81,7 @@ print("===================================", flush=True)
 print("")
 
 # Compute individual level
-tsnr_ana=postprocess.TSNR_main(config, IDs,redo=redo)
+tsnr_ana=postprocess.TSNR_main(config, IDs,redo)
 tsnr_ana.generate_tsnr_maps_and_csv()
 
 print("=== tSNR script Done ===", flush=True)
