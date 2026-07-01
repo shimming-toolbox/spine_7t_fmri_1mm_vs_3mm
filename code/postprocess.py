@@ -180,30 +180,6 @@ class GLM_main:
                 results.to_filename(stat_maps[i])
         
         return stat_maps
-    
-
-        files = glob.glob(os.path.join(
-            self.raw_dir,
-            self.config["preprocess_dir"]["main_dir"].format(ID),
-            "func",
-            f"task-{task}_acq-{acq_name}",
-            "sct_fmri_moco",
-            f"sub-{ID}_task-{task}_acq-{acq_name}*_bold_moco.nii.gz"
-        ))
-        if len(files) == 0:
-            return None
-        elif len(files) == 1:
-            selected_file = files[0]
-        else:
-            max_volumes = 0
-            selected_file = None
-            for f in files:
-                img = nib.load(f)
-                n_volumes = img.shape[3]
-                if n_volumes > max_volumes:
-                    max_volumes = n_volumes
-                    selected_file = f
-        return selected_file
 
     def run_icc(self, IDs=None, i_fnames=None, o_dir=None, mask_file=None, threshold=0, fwhm=[1,1,1],redo=False):
         
@@ -529,18 +505,13 @@ class TSNR_main:
 
         print("=== Compute tSNR map on longest moco neighbour run ===", flush=True)
         # Find the minimum number of volumes across all runs to standardize tSNR calculation
-        min_vols_for_tsnr = 1000
-        for ID in self.IDs:
-            for task in self.config["design_exp"]["task_names"]:
-                for acq_name in self.config["design_exp"]["acq_names"]:
-                    selected_file = self.find_moco_for_tsnr_calculation(ID, task, acq_name)
-                    if selected_file is None:
-                        continue
-                    n_vols = nib.load(selected_file).shape[3]
-                    if n_vols < min_vols_for_tsnr:
-                        min_vols_for_tsnr = n_vols
+        max_vols_for_tsnr = find_max_volume_common_to_all_runs(self.IDs,
+                                                               self.config["design_exp"]["task_names"],
+                                                               self.config["design_exp"]["acq_names"],
+                                                               self.config,
+                                                               mod_to_return="moco")
 
-        print(f"Minimum number of volumes across all runs: {min_vols_for_tsnr}", flush=True)
+        print(f"Minimum number of volumes across all runs: {max_vols_for_tsnr}", flush=True)
         # Minimum number of volumes across all runs: 60 (2026-04-07)
 
         # Compute_tsnr
@@ -551,7 +522,7 @@ class TSNR_main:
                 for acq_name in self.config["design_exp"]["acq_names"]:
                     tag = "task-" + task + "_acq-" + acq_name
 
-                    selected_file = self.find_moco_for_tsnr_calculation(ID, task, acq_name)
+                    selected_file, _ = get_fname_with_max_volumes(ID, task, acq_name, self.config, "moco")
                     if selected_file is None:
                         continue
 
@@ -559,7 +530,7 @@ class TSNR_main:
 
                     # Compute tSNR map in native space
                     path_tsnr_sub_folder = os.path.join(self.path_tsnr, f"sub-{ID}", tag)
-                    fname_tsnr = compute_tsnr_map(selected_file, path_tsnr_sub_folder, self.redo, min_vols_for_tsnr)
+                    fname_tsnr = compute_tsnr_map(selected_file, path_tsnr_sub_folder, self.redo, max_vols_for_tsnr)
 
                     # Segmentation file in native space
                     fname_mask = os.path.join(self.config["raw_dir"],self.config["preprocess_dir"]["main_dir"].format(ID),"func",tag,f"sub-{ID}_{tag}_bold_moco_mean_seg.nii.gz")
@@ -715,29 +686,18 @@ class TSNR_main:
 
         return fname_tsnr_avg
 
-    def find_moco_for_tsnr_calculation(self, ID, task, acq_name):
-        files = sorted(glob.glob(os.path.join(
-            self.config["raw_dir"],
-            self.config["preprocess_dir"]["main_dir"].format(ID),
-            "func",
-            f"task-{task}_acq-{acq_name}",
-            "sct_fmri_moco",
-            f"sub-{ID}_task-{task}_acq-{acq_name}*_bold_moco.nii.gz"
-        )))
-        if len(files) == 0:
-            return None
-        elif len(files) == 1:
-            selected_file = files[0]
-        else:
-            max_volumes = 0
-            selected_file = None
-            for f in files:
-                img = nib.load(f)
-                n_volumes = img.shape[3]
-                if n_volumes > max_volumes:
-                    max_volumes = n_volumes
-                    selected_file = f
-        return selected_file
+
+def find_max_volume_common_to_all_runs(IDs, tasks, acq_names, config, mod_to_return):
+    max_vols = 10000
+    for ID in IDs:
+        for task in tasks:
+            for acq_name in acq_names:
+                selected_file, n_vols = get_fname_with_max_volumes(ID, task, acq_name, config, mod_to_return)
+                if selected_file is None:
+                    continue
+                if n_vols < max_vols:
+                    max_vols = n_vols
+    return max_vols
 
     
 class EpiComparison:
@@ -752,32 +712,29 @@ class EpiComparison:
         self.path_fig_data = os.path.join(self.path_fig_epi_comparison, "data")
         os.makedirs(self.path_fig_data, exist_ok=True)
 
-    def create_figure(self, show_avg=False):
+    def create_figure(self):
         print("=== Create EPI comparison figure ===", flush=True)
 
         avg_acq_names = {k: v for k, v in self.config.get("derived_acq", {}).items() if "n_slices_avg" in v}
         self.name_base_avg = [k for k in avg_acq_names if "Base" in k][0]
         self.name_slice_avg = [k for k in avg_acq_names if "Slice" in k][0]
 
+        self.ids_with_avg = set()
         for ID in self.IDs:
             # shimBase+3mm was only acquired during the rest task (not motor), so use rest here
             create_mocomean_same_vols(ID, "rest", self.config, self.path_fig_data, self.redo)
-            # avg3mm derived acquisitions — task auto-detected per subject
-            create_mocomean_derived(ID, self.name_base_avg, self.name_slice_avg, self.config, self.path_fig_data, self.redo)
+            # avg3mm derived acquisitions — task auto-detected per subject; not all subjects have these
+            try:
+                create_mocomean_derived(ID, self.name_base_avg, self.name_slice_avg, self.config, self.path_fig_data, self.redo)
+                self.ids_with_avg.add(ID)
+            except RuntimeError as e:
+                print(f"INFO: Skipping avg3mm for sub-{ID}: {e}", flush=True)
 
+        ### Create 1 figure with all subjects
+        self._create_fullcomp_figure()
         ### Create 1 figure per subject, showing moco mean in native space between baseline and slicewise shim
-        if show_avg:
-            name_baseline = [a for a in self.config["design_exp"]["acq_names"] if "Base" in a][0]
-            name_slicewise = [a for a in self.config["design_exp"]["acq_names"] if "Slice" in a][0]
-            fname_avg_baseline = self._create_avg_moco_mean_in_pam50(self.IDs, name_baseline)
-            fname_avg_slicewise = self._create_avg_moco_mean_in_pam50(self.IDs, name_slicewise)
-        else:
-            fname_avg_baseline = None
-            fname_avg_slicewise = None
-
-        self._create_fullcomp_figure(fname_avg_baseline, fname_avg_slicewise, show_avg=False)
         for ID in self.IDs:
-            self._create_comp_figure(ID, fname_avg_baseline, fname_avg_slicewise, False)
+            self._create_comp_figure(ID)
             self._create_gif_comparison(ID, redo=self.redo)
 
     def _create_gif_comparison(self, ID, redo):
@@ -937,28 +894,18 @@ class EpiComparison:
         nib.save(nii_avg, fname_avg)
         return fname_avg
 
-    def _create_fullcomp_figure(self, fname_avg_baseline=None, fname_avg_slicewise=None, show_avg=False, show_slice_factor=2):
+    def _create_fullcomp_figure(self):
         # Create figure that shows moco mean in native space between baseline and slicewise shim
         # Highlight specific slices
-
-        # highlight = {'090': [1, 3, 7, 9, 25, 27],
-        #              '094': [],
-        #              '095': [1, 3, 11, 15, 21, 23, 27],
-        #              '100': [1, 5, 7, 9],
-        #              '101': [1, 5, 13, 27],
-        #              '106': [1, 11, 15, 19, 21],
-        #              'avg': [168]}
 
         self.fname_fig_epi_comparison = os.path.join(self.path_fig_epi_comparison, "epi_comparison.png")
         
         if not os.path.exists(self.fname_fig_epi_comparison) or self.redo:
             highlight = {
-                # '090': {1: 'sigtot', 3: 'sigtot', 7: 'sigtot', 9: 'geo'},
-                '094': {1: 'sigtot', 5: 'geo', 27: 'sigtot'},
-                '095': {1: 'sigvert', 3: 'sigvert', 21: 'sigtot'},
-                '100': {1: 'sigtot', 5: 'sigtot', 7: 'sigtot', 9: 'sigtot', 19: 'sigvert'},
-                '101': {1: 'geo', 5: 'sigtot', 27: 'sigvert'},
-                '106': {1: 'sigtot', 11: 'geo', 15: 'geo', 19: 'geo'}}
+                # '100': {1: 'sigtot', 5: 'sigtot', 7: 'sigtot', 9: 'sigtot', 19: 'sigvert'},
+                # '101': {1: 'geo', 5: 'sigtot', 27: 'sigvert'},
+                # '106': {1: 'sigtot', 11: 'geo', 15: 'geo', 19: 'geo'}
+            }
 
             color = {'sigtot': '#2ca02c', 'sigvert': '#26ede3', 'geo': '#b996d9'}
 
@@ -972,41 +919,39 @@ class EpiComparison:
             factor_3mm = 2
             factor_avg = 2
 
-            n_part = len(self.IDs)
-            if n_part > 5:
-                n_part = 5
-
-            ids_to_show = []
-            chose_if_available = ('094', '095', '100', '101', '106')
-            for i_part in range(n_part):
-                ID = chose_if_available[i_part] if chose_if_available[i_part] in self.IDs else self.IDs[i_part]
-                ids_to_show.append(ID)
+            ids_to_show = list(self.IDs)
+            n_part = len(ids_to_show)
 
             n_max_panels = 0
             for i_id, ID in enumerate(ids_to_show):
                 fname_3mm = self._select_moco_mean_same_vols(ID, name_baseline)
                 n_slices_3mm = nib.load(fname_3mm).shape[2]
                 n_max_panels = max(n_max_panels, round(n_slices_3mm / factor_3mm + 0.1))
-                fname_avg = self._select_moco_mean_same_vols(ID, name_base_avg)
-                n_slices_avg = nib.load(fname_avg).shape[2]
-                n_max_panels = max(n_max_panels, round(n_slices_avg / factor_avg + 0.1))
+                if ID in self.ids_with_avg:
+                    fname_avg = self._select_moco_mean_same_vols(ID, name_base_avg)
+                    n_slices_avg = nib.load(fname_avg).shape[2]
+                    n_max_panels = max(n_max_panels, round(n_slices_avg / factor_avg + 0.1))
 
-            # 5 cols per subject: base3mm, slice3mm, base_avg, slice_avg, gap
+            # 6 cols per subject: GRE, base3mm, slice3mm, base_avg, slice_avg, gap
             width_ratios = []
-            [width_ratios.extend([1, 1, 1, 1, 0.09]) for _ in range(n_part)]
+            [width_ratios.extend([1, 1, 1, 1, 1, 0.09]) for _ in range(n_part)]
             width_ratios = width_ratios[:-1]  # remove last gap
-            fig = plt.figure(figsize=(4.3 * n_part, n_max_panels))
-            gs_main = gridspec.GridSpec(2, n_part * 5 - 1, figure=fig, hspace=0, wspace=0, width_ratios=width_ratios, height_ratios=[0.001, 1])
+            fig = plt.figure(figsize=(5.5 * n_part, n_max_panels))
+            gs_main = gridspec.GridSpec(2, n_part * 6 - 1, figure=fig, hspace=0, wspace=0, width_ratios=width_ratios, height_ratios=[0.07, 1])
 
-            color_baseline = '#ADA8A8'
-            color_slicewise = '#ED263F'
-            color_base_avg = '#5599FF'
-            color_slice_avg = '#FF9900'
+            color_gre       = '#555555'   # dark gray for anatomy reference
+            color_baseline  = '#2166AC'   # dark blue  (shimBase 3mm)
+            color_slicewise = '#74ADD1'   # light blue (shimSlice 3mm)
+            color_base_avg  = '#D73027'   # dark red   (shimBase 1mm)
+            color_slice_avg = '#F4A582'   # light red  (shimSlice 1mm)
+
+            pam50_cord_path = os.path.join(self.config["code_dir"], "template", self.config["PAM50_cord"])
+            pam50_cord_data = nib.load(pam50_cord_path).get_fdata()
 
             print("IDs to show in the figure:", ids_to_show, flush=True)
             for i_id, ID in enumerate(ids_to_show):
 
-                gs_title = gs_main[0, i_id * 5:(i_id + 1) * 5 - 1].subgridspec(1, 1)
+                gs_title = gs_main[0, i_id * 6:(i_id + 1) * 6 - 1].subgridspec(1, 1)
                 ax_title = gs_title.subplots()
                 ax_title.axis('off')
                 ax_title.set_title(f"ID {ID}", fontsize=12, fontweight='bold')
@@ -1023,18 +968,23 @@ class EpiComparison:
                 mask_baseline = nib.load(fname_seg_baseline).get_fdata()
                 mask_slicewise = nib.load(fname_seg_slicewise).get_fdata()
 
-                # --- avg3mm derived (motor task) ---
-                task_base_avg = self._get_task_of_moco_mean_same_vols(ID, name_base_avg)
-                task_slice_avg = self._get_task_of_moco_mean_same_vols(ID, name_slice_avg)
-                fname_base_avg = self._select_moco_mean_same_vols(ID, name_base_avg)
-                fname_seg_base_avg, _, _ = get_fname_seg_and_warps(ID, task_base_avg, name_base_avg, self.config)
-                fname_slice_avg = self._select_moco_mean_same_vols(ID, name_slice_avg)
-                fname_seg_slice_avg, _, _ = get_fname_seg_and_warps(ID, task_slice_avg, name_slice_avg, self.config)
-
-                img_base_avg = nib.load(fname_base_avg).get_fdata()
-                img_slice_avg = nib.load(fname_slice_avg).get_fdata()
-                mask_base_avg = nib.load(fname_seg_base_avg).get_fdata()
-                mask_slice_avg = nib.load(fname_seg_slice_avg).get_fdata()
+                # --- avg3mm derived (motor task) — only for subjects that have this data ---
+                has_avg = ID in self.ids_with_avg
+                if has_avg:
+                    task_base_avg = self._get_task_of_moco_mean_same_vols(ID, name_base_avg)
+                    task_slice_avg = self._get_task_of_moco_mean_same_vols(ID, name_slice_avg)
+                    fname_base_avg = self._select_moco_mean_same_vols(ID, name_base_avg)
+                    fname_seg_base_avg, _, _ = get_fname_seg_and_warps(ID, task_base_avg, name_base_avg, self.config)
+                    fname_slice_avg = self._select_moco_mean_same_vols(ID, name_slice_avg)
+                    fname_seg_slice_avg, _, _ = get_fname_seg_and_warps(ID, task_slice_avg, name_slice_avg, self.config)
+                    img_base_avg = nib.load(fname_base_avg).get_fdata()
+                    img_slice_avg = nib.load(fname_slice_avg).get_fdata()
+                    mask_base_avg = nib.load(fname_seg_base_avg).get_fdata()
+                    mask_slice_avg = nib.load(fname_seg_slice_avg).get_fdata()
+                    n_panels_avg = round(img_base_avg.shape[2] / factor_avg + 0.1)
+                else:
+                    img_base_avg = img_slice_avg = mask_base_avg = mask_slice_avg = None
+                    n_panels_avg = 0
 
                 bound_lr = 16
                 bound_ud = 16
@@ -1045,26 +995,82 @@ class EpiComparison:
                 vmax = vmax - 0.2 * delta
 
                 n_panels_3mm = round(img_baseline.shape[2] / factor_3mm + 0.1)
-                n_panels_avg = round(img_base_avg.shape[2] / factor_avg + 0.1)
 
-                gs_baseline = gs_main[1, i_id * 5].subgridspec(n_max_panels, 1, hspace=0, wspace=0)
-                gs_slicewise = gs_main[1, i_id * 5 + 1].subgridspec(n_max_panels, 1, hspace=0, wspace=0)
-                gs_base_avg = gs_main[1, i_id * 5 + 2].subgridspec(n_max_panels, 1, hspace=0, wspace=0)
-                gs_slice_avg = gs_main[1, i_id * 5 + 3].subgridspec(n_max_panels, 1, hspace=0, wspace=0)
+                # --- GRE in PAM50 space ---
+                t2star_raw = os.path.join(self.config["raw_dir"], f"sub-{ID}", "anat", f"sub-{ID}_T2star.nii.gz")
+                t2star_pam50_path = os.path.join(self.path_fig_data, f"sub-{ID}", f"sub-{ID}_T2star_inPAM50.nii.gz")
+                if not os.path.exists(t2star_pam50_path) or self.redo:
+                    warp_anat_pam50 = os.path.join(
+                        self.config["raw_dir"],
+                        self.config["preprocess_dir"]["main_dir"].format(ID),
+                        "anat", "sct_register_to_template",
+                        f"sub-{ID}_from-anat_to-PAM50_mode-image_xfm.nii.gz"
+                    )
+                    pam50_t2_path = os.path.join(self.config["code_dir"], "template", self.config["PAM50_t2"])
+                    if os.path.exists(t2star_raw) and os.path.exists(warp_anat_pam50):
+                        os.system(f"sct_apply_transfo -i {t2star_raw} -d {pam50_t2_path} -w {warp_anat_pam50} -o {t2star_pam50_path} -x spline")
+                has_gre = os.path.exists(t2star_pam50_path)
+                if has_gre:
+                    img_gre = nib.load(t2star_pam50_path).get_fdata()
+                    # Determine EPI coverage z-range in PAM50
+                    epi_pam50_cands = glob.glob(os.path.join(
+                        self.config["raw_dir"],
+                        self.config["preprocess_dir"]["main_dir"].format(ID),
+                        "func", f"task-{task_3mm}_acq-{name_baseline}",
+                        "sct_register_multimodal",
+                        f"sub-{ID}_task-{task_3mm}_acq-{name_baseline}*_bold_moco_mean_coreg_in_PAM50.nii.gz"
+                    ))
+                    if epi_pam50_cands:
+                        epi_pam50_data = nib.load(sorted(epi_pam50_cands)[-1]).get_fdata()
+                        nz = np.where((epi_pam50_data > 0).any(axis=(0, 1)))[0]
+                    else:
+                        nz = np.where(pam50_cord_data.any(axis=(0, 1)))[0]
+                    if len(nz) == 0:
+                        has_gre = False
+                    else:
+                        gre_z_min, gre_z_max = int(nz[0]), int(nz[-1])
+                    n_gre_z = gre_z_max - gre_z_min + 1
+                    gre_step = max(1, round(n_gre_z / n_max_panels))
+                    gre_slices = list(range(gre_z_max, gre_z_min - 1, -gre_step))[:n_max_panels]
+                    # Compute GRE vmin/vmax from cord-cropped patches
+                    gre_flat = []
+                    for z in gre_slices:
+                        com_g = center_of_mass(pam50_cord_data[:, :, z])
+                        if any(np.isnan(com_g)):
+                            continue
+                        cx_g = slice(max(0, int(com_g[0] - bound_lr)), min(img_gre.shape[0], int(com_g[0] + bound_lr)))
+                        cy_g = slice(max(0, int(com_g[1] - bound_ud)), min(img_gre.shape[1], int(com_g[1] + bound_ud)))
+                        gre_flat.extend(img_gre[cx_g, cy_g, z].flatten())
+                    gre_flat = np.array(gre_flat)
+                    pos = gre_flat[gre_flat > 0]
+                    vmin_gre = float(np.percentile(pos, 1))  if pos.size else 0.0
+                    vmax_gre = float(np.percentile(pos, 99)) if pos.size else 1.0
+
+                gs_gre       = gs_main[1, i_id * 6].subgridspec(n_max_panels, 1, hspace=0, wspace=0)
+                gs_baseline  = gs_main[1, i_id * 6 + 1].subgridspec(n_max_panels, 1, hspace=0, wspace=0)
+                gs_slicewise = gs_main[1, i_id * 6 + 2].subgridspec(n_max_panels, 1, hspace=0, wspace=0)
+                gs_base_avg  = gs_main[1, i_id * 6 + 3].subgridspec(n_max_panels, 1, hspace=0, wspace=0)
+                gs_slice_avg = gs_main[1, i_id * 6 + 4].subgridspec(n_max_panels, 1, hspace=0, wspace=0)
+                axs_gre      = gs_gre.subplots()
                 axs_baseline = gs_baseline.subplots()
                 axs_slicewise = gs_slicewise.subplots()
                 axs_base_avg = gs_base_avg.subplots()
                 axs_slice_avg = gs_slice_avg.subplots()
 
                 # hide all panels first; only fill ones that have data
-                for ax_list in [axs_baseline, axs_slicewise, axs_base_avg, axs_slice_avg]:
+                for ax_list in [axs_gre, axs_baseline, axs_slicewise, axs_base_avg, axs_slice_avg]:
                     for ax in ax_list:
                         ax.axis('off')
 
                 spine_thickness = 2.5
 
-                def _draw_panel(axs, img, mask, factor, n_panels, color, subtitle=None, show_level=False, warp=None, fname_img=None, task=None, acq=None):
-                    range_slices = range(img.shape[2] - 1, -1, -factor)
+                def _draw_panel(axs, img, mask, factor, n_panels, color, subtitle=None, show_level=False,
+                                warp=None, fname_img=None, task=None, acq=None,
+                                vmin_img=None, vmax_img=None, explicit_slices=None):
+                    _vmin = vmin_img if vmin_img is not None else vmin
+                    _vmax = vmax_img if vmax_img is not None else vmax
+                    range_slices = explicit_slices if explicit_slices is not None else range(img.shape[2] - 1, -1, -factor)
+                    n_slices_total = len(range_slices) if explicit_slices is not None else len(list(range_slices))
                     for idx, slice_idx in enumerate(range_slices):
                         if idx >= n_max_panels:
                             break
@@ -1074,7 +1080,7 @@ class EpiComparison:
                         cx = slice(max(0, int(com[0] - bound_lr)), min(mask.shape[0], int(com[0] + bound_lr)))
                         cy = slice(max(0, int(com[1] - bound_ud)), min(mask.shape[1], int(com[1] + bound_ud)))
                         cropped = img[cx, cy, slice_idx]
-                        axs[idx].imshow(cropped.T, cmap='gray', origin='lower', vmin=vmin, vmax=vmax)
+                        axs[idx].imshow(cropped.T, cmap='gray', origin='lower', vmin=_vmin, vmax=_vmax)
                         axs[idx].set_aspect('equal', adjustable='box')
                         for spine in axs[idx].spines.values():
                             spine.set_linewidth(spine_thickness)
@@ -1086,7 +1092,7 @@ class EpiComparison:
                             axs[idx].spines['bottom'].set_visible(False)
                             if subtitle:
                                 axs[idx].set_title(subtitle, fontsize=7, color=color, fontweight='bold', pad=2)
-                        elif idx == len(range_slices) - 1:
+                        elif idx == n_slices_total - 1:
                             axs[idx].spines['top'].set_visible(False)
                             axs[idx].spines['bottom'].set_edgecolor(color)
                         else:
@@ -1098,25 +1104,20 @@ class EpiComparison:
                             axs[idx].text(0.1, 0.9, vert_level, color='white', fontsize=5, fontweight='bold',
                                           ha='center', va='center', transform=axs[idx].transAxes)
 
+                if has_gre:
+                    _draw_panel(axs_gre, img_gre, pam50_cord_data, factor_3mm, n_max_panels, color_gre,
+                                subtitle='GRE\n(T2*w)', vmin_img=vmin_gre, vmax_img=vmax_gre,
+                                explicit_slices=gre_slices)
                 _draw_panel(axs_baseline, img_baseline, mask_baseline, factor_3mm, n_panels_3mm, color_baseline,
                             subtitle='3mm\nshimBase', show_level=True, warp=fname_warp_pam50_to_base,
                             fname_img=fname_baseline, task=task_3mm, acq=name_baseline)
                 _draw_panel(axs_slicewise, img_slicewise, mask_slicewise, factor_3mm, n_panels_3mm, color_slicewise,
                             subtitle='3mm\nshimSlice')
-                _draw_panel(axs_base_avg, img_base_avg, mask_base_avg, factor_avg, n_panels_avg, color_base_avg,
-                            subtitle='1mm+avg\nshimBase')
-                _draw_panel(axs_slice_avg, img_slice_avg, mask_slice_avg, factor_avg, n_panels_avg, color_slice_avg,
-                            subtitle='1mm+avg\nshimSlice')
-
-                if i_id == 0:
-                    legend_fontsize = 8
-                    legend_elements = [
-                        Patch(facecolor='white', edgecolor=color_baseline, label='3mm shimBase', linewidth=1.5),
-                        Patch(facecolor='white', edgecolor=color_slicewise, label='3mm shimSlice', linewidth=1.5),
-                        Patch(facecolor='white', edgecolor=color_base_avg, label='1mm+avg shimBase', linewidth=1.5),
-                        Patch(facecolor='white', edgecolor=color_slice_avg, label='1mm+avg shimSlice', linewidth=1.5),
-                    ]
-                    axs_baseline[-1].legend(handles=legend_elements, loc=(0, -1.2), fontsize=legend_fontsize)
+                if has_avg:
+                    _draw_panel(axs_base_avg, img_base_avg, mask_base_avg, factor_avg, n_panels_avg, color_base_avg,
+                                subtitle='1mm+avg\nshimBase')
+                    _draw_panel(axs_slice_avg, img_slice_avg, mask_slice_avg, factor_avg, n_panels_avg, color_slice_avg,
+                                subtitle='1mm+avg\nshimSlice')
 
                 if ID in highlight:
                     range_slices_3mm = list(range(img_baseline.shape[2] - 1, -1, -factor_3mm))
@@ -1129,7 +1130,7 @@ class EpiComparison:
             self.fname_fig_epi_comparison = os.path.join(self.path_fig_epi_comparison, f"epi_comparison.png")
             fig.savefig(self.fname_fig_epi_comparison, dpi=2000)
 
-    def _create_comp_figure(self, ID, fname_avg_baseline, fname_avg_slicewise, show_avg=False, show_slice_factor=2):
+    def _create_comp_figure(self, ID):
         if not os.path.exists(os.path.join(self.path_fig_epi_comparison, f"sub-{ID}_epi_comparison.png")) or self.redo:
             name_baseline = [a for a in self.config["design_exp"]["acq_names"] if "Base" in a][0]
             name_slicewise = [a for a in self.config["design_exp"]["acq_names"] if "Slice" in a][0]
@@ -1356,7 +1357,7 @@ def get_fname_with_max_volumes(ID, task, acq_name, config, mod_to_return="moco_m
     )))
 
     if len(fname_acq_list) == 0:
-        raise RuntimeError(f"No file found for sub-{ID} task-{task} acq-{acq_name}")
+        return None, None
 
     # take the one with more volumes
     vols = 0
@@ -1409,6 +1410,8 @@ def create_mocomean_same_vols(ID, task, config, path_output, redo=False):
                                                                         mod_to_return="moco")
         fname_moco_shimslice, vols_shimslice = get_fname_with_max_volumes(ID, task, "shimSlice+3mm", config,
                                                                           mod_to_return="moco")
+        if fname_moco_shimbase is None or fname_moco_shimslice is None:
+            raise RuntimeError(f"Could not find moco file for sub-{ID} task-{task} (shimBase+3mm or shimSlice+3mm missing)")
 
         vols = min(vols_shimbase, vols_shimslice)
 
@@ -1432,13 +1435,13 @@ def create_mocomean_same_vols(ID, task, config, path_output, redo=False):
 def create_mocomean_derived(ID, name_baseline, name_slicewise, config, path_output, redo=False):
     """Copy moco_mean files for derived acquisitions (e.g. +avg3mm) to the figure data folder.
     No volume-matching is needed since derived acquisitions already represent one consistent series.
-    Task is auto-detected (motor preferred, rest as fallback) per acquisition."""
+    Task is auto-detected (rest preferred, motor as fallback) per acquisition."""
     path_sub = os.path.join(path_output, f"sub-{ID}")
     os.makedirs(path_sub, exist_ok=True)
     for name in [name_baseline, name_slicewise]:
         # auto-detect which task the derived acquisition lives under
         fname_src = None
-        for task in ("motor", "rest"):
+        for task in ("rest", "motor"):
             candidates = sorted(glob.glob(os.path.join(
                 config["raw_dir"],
                 config["preprocess_dir"]["main_dir"].format(ID),
