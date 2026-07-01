@@ -99,7 +99,7 @@ print("")
 # EPI comparison figure
 try:
     fig_epi_comparison = postprocess.EpiComparison(config, IDs, redo)
-    fig_epi_comparison.create_figure(show_avg=False)
+    fig_epi_comparison.create_figure()
 except Exception as e:
     print(f"WARNING: EPI comparison figure skipped: {e}", flush=True)
 

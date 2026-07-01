@@ -752,7 +752,7 @@ class EpiComparison:
         self.path_fig_data = os.path.join(self.path_fig_epi_comparison, "data")
         os.makedirs(self.path_fig_data, exist_ok=True)
 
-    def create_figure(self, show_avg=False):
+    def create_figure(self):
         print("=== Create EPI comparison figure ===", flush=True)
 
         avg_acq_names = {k: v for k, v in self.config.get("derived_acq", {}).items() if "n_slices_avg" in v}
@@ -770,19 +770,11 @@ class EpiComparison:
             except RuntimeError as e:
                 print(f"INFO: Skipping avg3mm for sub-{ID}: {e}", flush=True)
 
+        ### Create 1 figure with all subjects
+        self._create_fullcomp_figure()
         ### Create 1 figure per subject, showing moco mean in native space between baseline and slicewise shim
-        if show_avg:
-            name_baseline = [a for a in self.config["design_exp"]["acq_names"] if "Base" in a][0]
-            name_slicewise = [a for a in self.config["design_exp"]["acq_names"] if "Slice" in a][0]
-            fname_avg_baseline = self._create_avg_moco_mean_in_pam50(self.IDs, name_baseline)
-            fname_avg_slicewise = self._create_avg_moco_mean_in_pam50(self.IDs, name_slicewise)
-        else:
-            fname_avg_baseline = None
-            fname_avg_slicewise = None
-
-        self._create_fullcomp_figure(fname_avg_baseline, fname_avg_slicewise, show_avg=False)
         for ID in self.IDs:
-            self._create_comp_figure(ID, fname_avg_baseline, fname_avg_slicewise, False)
+            self._create_comp_figure(ID)
             self._create_gif_comparison(ID, redo=self.redo)
 
     def _create_gif_comparison(self, ID, redo):
@@ -942,28 +934,18 @@ class EpiComparison:
         nib.save(nii_avg, fname_avg)
         return fname_avg
 
-    def _create_fullcomp_figure(self, fname_avg_baseline=None, fname_avg_slicewise=None, show_avg=False, show_slice_factor=2):
+    def _create_fullcomp_figure(self):
         # Create figure that shows moco mean in native space between baseline and slicewise shim
         # Highlight specific slices
-
-        # highlight = {'090': [1, 3, 7, 9, 25, 27],
-        #              '094': [],
-        #              '095': [1, 3, 11, 15, 21, 23, 27],
-        #              '100': [1, 5, 7, 9],
-        #              '101': [1, 5, 13, 27],
-        #              '106': [1, 11, 15, 19, 21],
-        #              'avg': [168]}
 
         self.fname_fig_epi_comparison = os.path.join(self.path_fig_epi_comparison, "epi_comparison.png")
         
         if not os.path.exists(self.fname_fig_epi_comparison) or self.redo:
             highlight = {
-                # '090': {1: 'sigtot', 3: 'sigtot', 7: 'sigtot', 9: 'geo'},
-                '094': {1: 'sigtot', 5: 'geo', 27: 'sigtot'},
-                '095': {1: 'sigvert', 3: 'sigvert', 21: 'sigtot'},
-                '100': {1: 'sigtot', 5: 'sigtot', 7: 'sigtot', 9: 'sigtot', 19: 'sigvert'},
-                '101': {1: 'geo', 5: 'sigtot', 27: 'sigvert'},
-                '106': {1: 'sigtot', 11: 'geo', 15: 'geo', 19: 'geo'}}
+                # '100': {1: 'sigtot', 5: 'sigtot', 7: 'sigtot', 9: 'sigtot', 19: 'sigvert'},
+                # '101': {1: 'geo', 5: 'sigtot', 27: 'sigvert'},
+                # '106': {1: 'sigtot', 11: 'geo', 15: 'geo', 19: 'geo'}
+            }
 
             color = {'sigtot': '#2ca02c', 'sigvert': '#26ede3', 'geo': '#b996d9'}
 
@@ -1186,7 +1168,7 @@ class EpiComparison:
             self.fname_fig_epi_comparison = os.path.join(self.path_fig_epi_comparison, f"epi_comparison.png")
             fig.savefig(self.fname_fig_epi_comparison, dpi=2000)
 
-    def _create_comp_figure(self, ID, fname_avg_baseline, fname_avg_slicewise, show_avg=False, show_slice_factor=2):
+    def _create_comp_figure(self, ID):
         if not os.path.exists(os.path.join(self.path_fig_epi_comparison, f"sub-{ID}_epi_comparison.png")) or self.redo:
             name_baseline = [a for a in self.config["design_exp"]["acq_names"] if "Base" in a][0]
             name_slicewise = [a for a in self.config["design_exp"]["acq_names"] if "Slice" in a][0]
