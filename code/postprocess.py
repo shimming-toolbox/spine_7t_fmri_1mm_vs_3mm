@@ -1489,13 +1489,13 @@ def create_mocomean_same_vols(ID, task, config, path_output, redo=False):
 def create_mocomean_derived(ID, name_baseline, name_slicewise, config, path_output, redo=False):
     """Copy moco_mean files for derived acquisitions (e.g. +avg3mm) to the figure data folder.
     No volume-matching is needed since derived acquisitions already represent one consistent series.
-    Task is auto-detected (motor preferred, rest as fallback) per acquisition."""
+    Task is auto-detected (rest is preferred, motor as fallback) per acquisition."""
     path_sub = os.path.join(path_output, f"sub-{ID}")
     os.makedirs(path_sub, exist_ok=True)
     for name in [name_baseline, name_slicewise]:
         # auto-detect which task the derived acquisition lives under
         fname_src = None
-        for task in ("motor", "rest"):
+        for task in ("rest", "motor"):
             candidates = sorted(glob.glob(os.path.join(
                 config["raw_dir"],
                 config["preprocess_dir"]["main_dir"].format(ID),
