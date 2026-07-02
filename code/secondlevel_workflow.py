@@ -140,6 +140,7 @@ for acq_name in config["design_exp"]["acq_names"]:
 avg_acq_names = {k: v for k, v in config.get("derived_acq", {}).items() if "n_slices_avg" in v}
 tsnr_avg3mm = {}  # acq_name -> fname_avg_tsnr in PAM50
 for acq_name in avg_acq_names:
+    source_acq = avg_acq_names[acq_name]["source_acq"]
     tsnr_id_fname = []
     cord_seg_file = []
     warp_file = []
@@ -154,8 +155,10 @@ for acq_name in avg_acq_names:
         if not selected_dirs:
             continue
         tsnr_files = glob.glob(os.path.join(snr_path, selected_dirs[0], "*_moco_tsnr.nii.gz"))
-        seg_files = glob.glob(os.path.join(preprocessing_dir.format(ID), 'func', selected_dirs[0], config["preprocess_f"]["func_seg"].format(ID, selected_dirs[0], "")))
-        warp_files = glob.glob(os.path.join(preprocessing_dir.format(ID), 'func', selected_dirs[0], f"sub-{ID}_{selected_dirs[0]}_from-func_to_PAM50_mode-image_xfm.nii.gz"))
+        # seg and warp live under the source acq's preprocessing dir (derived has none)
+        source_tag = f"task-rest_acq-{source_acq}"
+        seg_files = glob.glob(os.path.join(preprocessing_dir.format(ID), 'func', source_tag, config["preprocess_f"]["func_seg"].format(ID, source_tag, "")))
+        warp_files = glob.glob(os.path.join(preprocessing_dir.format(ID), 'func', source_tag, f"sub-{ID}_{source_tag}_from-func_to_PAM50_mode-image_xfm.nii.gz"))
         if not (tsnr_files and seg_files and warp_files):
             continue
         task_name = selected_dirs[0].split("_")[0].split("-")[1]

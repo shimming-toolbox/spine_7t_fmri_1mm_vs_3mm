@@ -28,7 +28,7 @@ from matplotlib.legend_handler import HandlerPatch
 import matplotlib.gridspec as gridspec
 import matplotlib.animation as animation
 
-from utils import compute_tsnr_map, compute_SNR, extract_mean_within_mask
+from utils import compute_tsnr_map, compute_SNR, extract_mean_within_mask, average_slices_img
 #####################################################
 class GLM_main:
     """
@@ -685,6 +685,57 @@ class TSNR_main:
             nib.save(nii_tsnr_avg, fname_tsnr_avg)
 
         return fname_tsnr_avg
+
+    def generate_tsnr_maps_derived(self):
+        """Compute tSNR for derived (avg3mm) acquisitions: spatially average the source 4D moco,
+        compute tSNR, then warp to PAM50 using the source acquisition's registration files."""
+        preprocessing_dir = os.path.join(self.config["raw_dir"], self.config["preprocess_dir"]["main_dir"])
+
+        for derived_acq_name, acq_info in self.config.get("derived_acq", {}).items():
+            if "n_slices_avg" not in acq_info:
+                continue
+            source_acq = acq_info["source_acq"]
+            n_slices_avg = acq_info["n_slices_avg"]
+
+            for ID in self.IDs:
+                tag_source = f"task-rest_acq-{source_acq}"
+                tag_derived = f"task-rest_acq-{derived_acq_name}"
+
+                source_moco_cands = sorted(glob.glob(os.path.join(
+                    preprocessing_dir.format(ID), 'func', tag_source, 'sct_fmri_moco',
+                    f'sub-{ID}_{tag_source}*_bold_moco.nii.gz'
+                )))
+                if not source_moco_cands:
+                    print(f"INFO: No {source_acq} REST moco for sub-{ID}, skipping avg3mm tSNR.", flush=True)
+                    continue
+
+                fname_seg = os.path.join(preprocessing_dir.format(ID), 'func', tag_source,
+                                         f"sub-{ID}_{tag_source}_bold_moco_mean_seg.nii.gz")
+                fname_warp = os.path.join(preprocessing_dir.format(ID), 'func', tag_source,
+                                          f"sub-{ID}_{tag_source}_from-func_to_PAM50_mode-image_xfm.nii.gz")
+                if not os.path.exists(fname_seg) or not os.path.exists(fname_warp):
+                    print(f"WARNING: Missing seg or warp for sub-{ID} {source_acq}, skipping avg3mm tSNR.", flush=True)
+                    continue
+
+                path_tsnr_sub_folder = os.path.join(self.path_tsnr, f"sub-{ID}", tag_derived)
+                os.makedirs(path_tsnr_sub_folder, exist_ok=True)
+
+                avg_moco = os.path.join(path_tsnr_sub_folder, f"sub-{ID}_{tag_derived}_bold_moco.nii.gz")
+                try:
+                    average_slices_img(i_img=source_moco_cands[0], o_img=avg_moco,
+                                       n_slices_avg=n_slices_avg, redo=self.redo)
+                except Exception as e:
+                    print(f"WARNING: Slice averaging failed for sub-{ID} {derived_acq_name}: {e}", flush=True)
+                    continue
+
+                fname_tsnr = compute_tsnr_map(avg_moco, path_tsnr_sub_folder, self.redo, first_n_vols=None)
+
+                fname_tsnr_in_pam50 = fname_tsnr.replace("tsnr.nii.gz", "tsnr_in_PAM50.nii.gz")
+                if not os.path.exists(fname_tsnr_in_pam50) or self.redo:
+                    fname_template = os.path.join(self.config["code_dir"], "template", self.config["PAM50_t2"])
+                    cmd = (f"sct_apply_transfo -i {fname_tsnr} -d {fname_template}"
+                           f" -w {fname_warp} -o {fname_tsnr_in_pam50} -x nn")
+                    os.system(cmd)
 
 
 def find_max_volume_common_to_all_runs(IDs, tasks, acq_names, config, mod_to_return):
