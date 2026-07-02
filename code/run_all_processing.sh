@@ -1,6 +1,9 @@
 #!/bin/bash
 # Keep the screen window open after the script exits (success or error) so logs can be reviewed.
-trap 'echo ""; echo "=== Script exited (code $?). Type '\''exit'\'' to close screen. ==="; bash' EXIT
+# Only active inside a screen session ($STY is set by screen) to avoid dropping the user out of their conda env.
+if [ -n "$STY" ] || [ -n "$WINDOW" ]; then
+    trap 'echo ""; echo "=== Script exited (code $?). Type '\''exit'\'' to close screen. ==="; bash' EXIT
+fi
 
 # Capture full invocation before argument parsing consumes $@
 INVOCATION_ARGS="$*"
@@ -19,7 +22,6 @@ RUN_DENOISING=false
 RUN_FIRSTLEVEL=false
 RUN_SECONDLEVEL=false
 RUN_FIGURES=false
-RUN_COMPARE=false
 REDO=false
 
 # Parse arguments
@@ -33,7 +35,7 @@ while [[ $# -gt 0 ]]; do
         --denoising) RUN_DENOISING=true; shift;;
         --firstlevel) RUN_FIRSTLEVEL=true; shift;;
         --secondlevel) RUN_SECONDLEVEL=true; shift;;
-        --compare) RUN_COMPARE=true; shift;;
+        --figures) RUN_FIGURES=true; shift;;
         --redo) REDO=true; shift;;
       *) echo "Unknown argument $1"; exit 1 ;;
     esac
@@ -43,10 +45,9 @@ if [ "${RUN_PREPROSS}" = false ] && \
    [ "${RUN_DENOISING}" = false ] && \
    [ "${RUN_FIRSTLEVEL}" = false ] && \
    [ "${RUN_SECONDLEVEL}" = false ] && \
-   [ "${RUN_FIGURES}" = false ] && \
-   [ "${RUN_COMPARE}" = false ]; then
+   [ "${RUN_FIGURES}" = false ]; then
     echo "ERROR: No processing step selected."
-    echo "Use --preprocess, --denoising, --firstlevel, --secondlevel and/or --compare"
+    echo "Use --preprocess, --denoising, --firstlevel, --secondlevel and/or --figures"
     exit 1
 fi
 
@@ -129,9 +130,9 @@ if [ "${RUN_SECONDLEVEL}" = true ]; then
 fi
 
 # --------------------------
-# Run quantitative comparison (1mm vs 3mm)
+# Run figures
 # --------------------------
-if [ "${RUN_COMPARE}" = true ]; then
-    run_step "1mm vs 3mm comparison" "compare_${timestamp}.txt" \
-        ${PYTHON} -u ../code/compare_workflow.py --path-data "${PATH_DATA}" --ids "${IDs[@]}" "${TASKS_ARG[@]}" --redo "${REDO}"
+if [ "${RUN_FIGURES}" = true ]; then
+    run_step "Figures" "figures_${timestamp}.txt" \
+        ${PYTHON} -u ../code/figures_workflow.py --path-data "${PATH_DATA}" --ids "${IDs[@]}" --redo "${REDO}"
 fi

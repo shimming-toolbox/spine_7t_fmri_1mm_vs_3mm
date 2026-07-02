@@ -771,9 +771,15 @@ class EpiComparison:
         self.name_slice_avg = [k for k in avg_acq_names if "Slice" in k][0]
 
         self.ids_with_avg = set()
+        ids_with_3mm = []
         for ID in self.IDs:
             # shimBase+3mm was only acquired during the rest task (not motor), so use rest here
-            create_mocomean_same_vols(ID, "rest", self.config, self.path_fig_data, self.redo)
+            try:
+                create_mocomean_same_vols(ID, "rest", self.config, self.path_fig_data, self.redo)
+                ids_with_3mm.append(ID)
+            except RuntimeError as e:
+                print(f"WARNING: Skipping sub-{ID} from EPI comparison figure: {e}", flush=True)
+                continue
             # avg3mm derived acquisitions — task auto-detected per subject; not all subjects have these
             try:
                 create_mocomean_derived(ID, self.name_base_avg, self.name_slice_avg, self.config, self.path_fig_data, self.redo)
@@ -781,12 +787,19 @@ class EpiComparison:
             except RuntimeError as e:
                 print(f"INFO: Skipping avg3mm for sub-{ID}: {e}", flush=True)
 
+        if not ids_with_3mm:
+            print("WARNING: No subjects with valid 3mm data — EPI comparison figure skipped.", flush=True)
+            return
+
         ### Create 1 figure with all subjects
+        _saved_ids = self.IDs
+        self.IDs = ids_with_3mm
         self._create_fullcomp_figure()
         ### Create 1 figure per subject, showing moco mean in native space between baseline and slicewise shim
-        for ID in self.IDs:
+        for ID in ids_with_3mm:
             self._create_comp_figure(ID)
             self._create_gif_comparison(ID, redo=self.redo)
+        self.IDs = _saved_ids
 
     def _create_gif_comparison(self, ID, redo):
         show_slice_factor = 2
