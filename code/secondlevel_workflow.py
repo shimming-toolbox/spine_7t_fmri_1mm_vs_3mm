@@ -136,6 +136,41 @@ for acq_name in config["design_exp"]["acq_names"]:
         except Exception as e:
             print(f"WARNING: {metric} boxplot failed for acq-{acq_name}: {e}", flush=True)
 
+# Also average tSNR for derived (avg3mm) acquisitions, needed for the 3mm vs avg3mm map comparison
+avg_acq_names = {k: v for k, v in config.get("derived_acq", {}).items() if "n_slices_avg" in v}
+tsnr_avg3mm = {}  # acq_name -> fname_avg_tsnr in PAM50
+for acq_name in avg_acq_names:
+    tsnr_id_fname = []
+    cord_seg_file = []
+    warp_file = []
+    valid_IDs = []
+    for ID in IDs:
+        snr_path = first_level_dir.format("snr", ID)
+        if not os.path.isdir(snr_path):
+            continue
+        dirs = [d for d in os.listdir(snr_path) if os.path.isdir(os.path.join(snr_path, d))]
+        rest_dirs = [d for d in dirs if "rest" in d and acq_name in d]
+        selected_dirs = rest_dirs if rest_dirs else [d for d in dirs if acq_name in d]
+        if not selected_dirs:
+            continue
+        tsnr_files = glob.glob(os.path.join(snr_path, selected_dirs[0], "*_moco_tsnr.nii.gz"))
+        seg_files = glob.glob(os.path.join(preprocessing_dir.format(ID), 'func', selected_dirs[0], config["preprocess_f"]["func_seg"].format(ID, selected_dirs[0], "")))
+        warp_files = glob.glob(os.path.join(preprocessing_dir.format(ID), 'func', selected_dirs[0], f"sub-{ID}_{selected_dirs[0]}_from-func_to_PAM50_mode-image_xfm.nii.gz"))
+        if not (tsnr_files and seg_files and warp_files):
+            continue
+        task_name = selected_dirs[0].split("_")[0].split("-")[1]
+        tsnr_id_fname.append(tsnr_files[0])
+        cord_seg_file.append(seg_files[0])
+        warp_file.append(warp_files[0])
+        valid_IDs.append(ID)
+    if not valid_IDs:
+        print(f"INFO: No subjects with avg3mm tSNR data for acq-{acq_name}, skipping.", flush=True)
+        continue
+    tsnr_avg3mm[acq_name] = tsnr_ana.generate_average_tsnr_in_pam50(
+        IDs=valid_IDs, task_name=task_name, acq_name=acq_name,
+        tsnr_fnames=tsnr_id_fname, seg_fnames=cord_seg_file,
+        warp_fnames=warp_file, fname_mask=mask)
+
 #------------------------------------------------------------------
 #------ Compute average FD
 #------------------------------------------------------------------
@@ -231,27 +266,26 @@ for cluster_corr in [0.01,0.001]:
 #------------------------------------------------------------------
 #------ Plot group level tSNR and GLM
 #------------------------------------------------------------------
-# --- Plot tSNR ---
+# --- Plot tSNR: native 3mm vs avg3mm, separately for shimBase and shimSlice ---
 try:
- i_fnames_tSNR_pair=[]
- for acq_name in config["design_exp"]["acq_names"]:
-    candidate = os.path.join(second_level_dir.format("snr"), f"tsnr_n{len(IDs)}_{acq_name}_avg_in_PAM50.nii.gz")
-    if os.path.exists(candidate):
-        i_fnames_tSNR_pair.append(candidate)
+ for shim_label in ["shimBase", "shimSlice"]:
+    acq_3mm   = next((a for a in config["design_exp"]["acq_names"] if shim_label in a and "3mm" in a), None)
+    acq_avg3mm = next((a for a in avg_acq_names if shim_label in a), None)
+    if acq_3mm is None or acq_avg3mm is None:
+        print(f"INFO: Could not find 3mm or avg3mm acq for {shim_label}, skipping tSNR map.", flush=True)
+        continue
+    f_3mm   = os.path.join(second_level_dir.format("snr"), f"tsnr_n{len(IDs)}_{acq_3mm}_avg_in_PAM50.nii.gz")
+    f_avg3mm = tsnr_avg3mm.get(acq_avg3mm)
+    if not os.path.exists(f_3mm) or f_avg3mm is None or not os.path.exists(f_avg3mm):
+        print(f"INFO: Missing tSNR avg map for {shim_label}, skipping.", flush=True)
+        continue
+    tsnr_plot = figures.plot_fmri_maps(
+        i_fnames=[f_3mm, f_avg3mm],
+        output_fname=os.path.join(output_fig, f"n{len(IDs)}_tsnr_{shim_label}_3mm_vs_avg3mm_map.png"),
+        stat_min=5, stat_max=16, cmap='turbo', cbar_label='tSNR',
+        titles=[f"{shim_label} 3mm", f"{shim_label} avg3mm"],
+        background_fname=os.path.join(path_code, "template", config["PAM50_t2"]), redo=redo)
 
- tsnr_plot = figures.plot_fmri_maps(i_fnames=i_fnames_tSNR_pair,
-                                   output_fname=os.path.join(output_fig, f"n{len(IDs)}_tsnr_avg_map.png"),
-                                   stat_min=5,
-                                   stat_max=16,
-                                   cmap='turbo',
-                                   cbar_label='tSNR',
-                                   background_fname=os.path.join(path_code, "template", config["PAM50_t2"]), redo=redo)
-
- if "tsnr" in box_plot and "ssnr" in box_plot:
-     figures.combine_plots(output_fname=os.path.join(output_fig, f"n{len(IDs)}_combined_SNR_plots.png"),
-                           map_files=[tsnr_plot],
-                           graph_files=[box_plot["tsnr"], box_plot["ssnr"]],
-                           figsize=(3.5, 3.5), redo=redo)
 except Exception as e:
     print(f"WARNING: tSNR group figure failed: {e}", flush=True)
 
