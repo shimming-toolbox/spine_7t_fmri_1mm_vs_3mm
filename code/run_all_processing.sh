@@ -19,7 +19,6 @@ RUN_DENOISING=false
 RUN_FIRSTLEVEL=false
 RUN_SECONDLEVEL=false
 RUN_FIGURES=false
-RUN_COMPARE=false
 REDO=false
 
 # Parse arguments
@@ -33,7 +32,6 @@ while [[ $# -gt 0 ]]; do
         --denoising) RUN_DENOISING=true; shift;;
         --firstlevel) RUN_FIRSTLEVEL=true; shift;;
         --secondlevel) RUN_SECONDLEVEL=true; shift;;
-        --compare) RUN_COMPARE=true; shift;;
         --figures) RUN_FIGURES=true; shift;;
         --redo) REDO=true; shift;;
       *) echo "Unknown argument $1"; exit 1 ;;
@@ -44,10 +42,9 @@ if [ "${RUN_PREPROSS}" = false ] && \
    [ "${RUN_DENOISING}" = false ] && \
    [ "${RUN_FIRSTLEVEL}" = false ] && \
    [ "${RUN_SECONDLEVEL}" = false ] && \
-   [ "${RUN_FIGURES}" = false ] && \
-   [ "${RUN_COMPARE}" = false ]; then
+   [ "${RUN_FIGURES}" = false ]; then
     echo "ERROR: No processing step selected."
-    echo "Use --preprocess, --denoising, --firstlevel, --secondlevel, --compare and/or --figures"
+    echo "Use --preprocess, --denoising, --firstlevel, --secondlevel and/or --figures"
     exit 1
 fi
 
@@ -127,14 +124,6 @@ fi
 if [ "${RUN_SECONDLEVEL}" = true ]; then
     run_step "Second level analysis" "secondlevel_${timestamp}.txt" \
         ${PYTHON} -u ../code/secondlevel_workflow.py --path-data "${PATH_DATA}" --ids "${IDs[@]}" "${TASKS_ARG[@]}" --redo "${REDO}"
-fi
-
-# --------------------------
-# Run quantitative comparison (1mm vs 3mm)
-# --------------------------
-if [ "${RUN_COMPARE}" = true ]; then
-    run_step "1mm vs 3mm comparison" "compare_${timestamp}.txt" \
-        ${PYTHON} -u ../code/compare_workflow.py --path-data "${PATH_DATA}" --ids "${IDs[@]}" "${TASKS_ARG[@]}" --redo "${REDO}"
 fi
 
 # --------------------------

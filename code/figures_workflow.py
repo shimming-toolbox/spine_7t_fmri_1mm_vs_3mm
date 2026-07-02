@@ -7,6 +7,7 @@
 import re, json, sys, os, glob, argparse
 import numpy as np
 import pandas as pd
+import nibabel as nib
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
@@ -293,14 +294,23 @@ for icc_label, subdir in [
 
 
 # ------------------------------------------------------------------
-# 7. compare_1mm_3mm figures (tSNR triplet, BOLD sensitivity, MI)
+# 7. compare_1mm_3mm: extract metrics then generate figures
 # ------------------------------------------------------------------
 print("", flush=True)
-print("=== compare_1mm_3mm figures ===", flush=True)
+print("=== compare_1mm_3mm: metric extraction + figures ===", flush=True)
 
-out_dir  = os.path.join(path_data, "derivatives", "processing", "compare_1mm_3mm")
+from utils import compute_tsnr_map
+
+out_dir         = os.path.join(path_data, "derivatives", "processing", "compare_1mm_3mm")
 fig_dir_compare = os.path.join(path_data, "derivatives", "processing", "figures", "compare_1mm_3mm")
+preprocessing_dir_compare = os.path.join(path_data, config["preprocess_dir"]["main_dir"])
+tsnr_precomp_dir = os.path.join(path_data, config["first_level"]["dir"].format("snr", "").split("sub")[0])
+os.makedirs(out_dir, exist_ok=True)
 os.makedirs(fig_dir_compare, exist_ok=True)
+
+REGULAR_ACQS = config["design_exp"]["acq_names"]
+DERIVED_ACQS = [k for k in config.get("derived_acq", {}) if "smooth3mm" in k]
+ALL_ACQS     = REGULAR_ACQS + DERIVED_ACQS
 
 SHIM_TRIPLETS = [
     ("shimSlice+1mm+sms2", "shimSlice+1mm+sms2+smooth3mm", "shimSlice+3mm", "shimSlice"),
@@ -312,18 +322,38 @@ XLABELS_3 = {
     "shimSlice+3mm":                "3mm",
 }
 Z_THRESHOLD = 3.1
+MI_BINS = 32
+pam50_mask_path = os.path.join(path_code, "template", config["PAM50_cord"])
+all_tasks = config["design_exp"]["task_names"]
+
+
+def _get_tsnr_for_derived(ID, task, acq_name):
+    tag = f"task-{task}_acq-{acq_name}"
+    moco_candidates = sorted(glob.glob(os.path.join(
+        preprocessing_dir_compare.format(ID), "func", tag,
+        "sct_fmri_moco", f"sub-{ID}_{tag}*_bold_moco.nii.gz"
+    )))
+    if not moco_candidates:
+        return None
+    moco_file = max(moco_candidates, key=lambda f: nib.load(f).shape[3])
+    cache_dir = os.path.join(out_dir, "tsnr_maps", f"sub-{ID}", tag)
+    return compute_tsnr_map(moco_file, cache_dir, redo)
+
+
+def _get_seg(ID, task, acq_name):
+    tag = f"task-{task}_acq-{acq_name}"
+    return os.path.join(
+        preprocessing_dir_compare.format(ID), "func", tag,
+        f"sub-{ID}_{tag}_bold_moco_mean_seg.nii.gz"
+    )
 
 
 def wilcoxon_str(a, b):
     stat, pval = stats.wilcoxon(a, b)
-    if pval < 0.001:
-        label = "p < 0.001 ***"
-    elif pval < 0.01:
-        label = f"p = {pval:.3f} **"
-    elif pval < 0.05:
-        label = f"p = {pval:.3f} *"
-    else:
-        label = f"p = {pval:.3f} ns"
+    if pval < 0.001:   label = "p < 0.001 ***"
+    elif pval < 0.01:  label = f"p = {pval:.3f} **"
+    elif pval < 0.05:  label = f"p = {pval:.3f} *"
+    else:              label = f"p = {pval:.3f} ns"
     return stat, pval, label
 
 
@@ -350,8 +380,8 @@ def _triplet_fig(ax, d, acqs, xpos, common_all, common_23, pstr23, ylabel, title
         wh.set_color(bp_cols[i // 2]); wh.set_alpha(0.6)
         ca.set_color(bp_cols[i // 2]); ca.set_alpha(0.6)
     for sub in common_all:
-        y_vals = [d[a].get(sub, np.nan) for a in acqs]
-        ax.plot(xpos, y_vals, "o-", color="dimgray", alpha=0.5, linewidth=1, markersize=4, zorder=3)
+        ax.plot(xpos, [d[a].get(sub, np.nan) for a in acqs],
+                "o-", color="dimgray", alpha=0.5, linewidth=1, markersize=4, zorder=3)
     for sub in common_23.difference(common_all):
         ax.plot([1, 2], [d[acqs[1]][sub], d[acqs[2]][sub]], "o--",
                 color="dimgray", alpha=0.4, linewidth=1, markersize=4, zorder=3)
@@ -368,44 +398,152 @@ def _triplet_fig(ax, d, acqs, xpos, common_all, common_23, pstr23, ylabel, title
     ax.spines["right"].set_visible(False)
 
 
-# --- tSNR triplet ---
+# --- 7a. tSNR within SC mask ---
 tsnr_csv = os.path.join(out_dir, "tsnr_sc_mask.csv")
-if not os.path.exists(tsnr_csv):
-    print(f"INFO: {tsnr_csv} not found — run --compare first. Skipping tSNR compare figures.", flush=True)
-else:
-    df = pd.read_csv(tsnr_csv)
-    for task in df["task"].unique():
-        df_task = df[df["task"] == task]
-        for acq1, acq2, acq3, shim_label in SHIM_TRIPLETS:
-            fig_path = os.path.join(fig_dir_compare, f"tsnr_sc_{shim_label}_{task}_triplet.png")
-            if os.path.exists(fig_path) and not redo:
-                print(f"Figure already exists: {fig_path}", flush=True)
-                continue
-            d = {a: df_task[df_task["acq"] == a].set_index("subject")["tsnr_sc"] for a in [acq1, acq2, acq3]}
-            common_all = d[acq1].index.intersection(d[acq2].index).intersection(d[acq3].index)
-            common_23  = d[acq2].index.intersection(d[acq3].index)
-            if len(common_23) < 2:
-                print(f"WARNING: Only {len(common_23)} paired subject(s) for tSNR {shim_label} task-{task}, skipping.", flush=True)
-                continue
-            _, _, pstr23 = wilcoxon_str(d[acq2].loc[common_23].values, d[acq3].loc[common_23].values)
-            try:
-                fig, ax = plt.subplots(figsize=(4, 4.5))
-                _triplet_fig(ax, d, [acq1, acq2, acq3], [0, 1, 2], common_all, common_23, pstr23,
-                             "Mean tSNR within SC mask",
-                             f"tSNR: 1mm vs 3mm  ({shim_label}, task-{task})\nn={len(common_23)} paired")
-                fig.tight_layout()
-                fig.savefig(fig_path, dpi=150, bbox_inches="tight")
-                plt.close(fig)
-                print(f"Saved: {fig_path}", flush=True)
-            except Exception as e:
-                print(f"WARNING: tSNR triplet figure failed ({shim_label} task-{task}): {e}", flush=True)
+if not os.path.exists(tsnr_csv) or redo:
+    records = []
+    for ID in IDs:
+        for task in all_tasks:
+            for acq_name in ALL_ACQS:
+                tag = f"task-{task}_acq-{acq_name}"
+                if acq_name in DERIVED_ACQS:
+                    tsnr_map = _get_tsnr_for_derived(ID, task, acq_name)
+                else:
+                    cands = glob.glob(os.path.join(tsnr_precomp_dir, f"sub-{ID}", tag,
+                                                   f"sub-{ID}_{tag}*_bold_moco_tsnr.nii.gz"))
+                    tsnr_map = sorted(cands)[-1] if cands else None
+                if not tsnr_map or not os.path.exists(tsnr_map):
+                    continue
+                seg_path = _get_seg(ID, task, acq_name)
+                if not os.path.exists(seg_path):
+                    continue
+                vals = nib.load(tsnr_map).get_fdata()[nib.load(seg_path).get_fdata() > 0]
+                if vals.size == 0:
+                    continue
+                records.append({"subject": ID, "task": task, "acq": acq_name, "tsnr_sc": float(np.mean(vals))})
+    pd.DataFrame(records).to_csv(tsnr_csv, index=False)
+    print(f"Saved: {tsnr_csv}", flush=True)
 
-# --- BOLD sensitivity triplet ---
+df_tsnr = pd.read_csv(tsnr_csv)
+
+# --- 7b. BOLD sensitivity ---
 bold_csv = os.path.join(out_dir, "bold_sensitivity.csv")
-if not os.path.exists(bold_csv):
-    print(f"INFO: {bold_csv} not found — run --compare first. Skipping BOLD sensitivity figures.", flush=True)
+glm_base_dir = os.path.join(path_data, config["first_level"]["dir"].format("glm", "").split("sub")[0])
+if not os.path.exists(bold_csv) or redo:
+    if not os.path.exists(pam50_mask_path):
+        print(f"WARNING: PAM50 cord mask not found, skipping BOLD sensitivity.", flush=True)
+        bold_df = pd.DataFrame()
+    else:
+        pam50_mask = nib.load(pam50_mask_path).get_fdata() > 0
+        bold_records = []
+        for ID in IDs:
+            for task in all_tasks:
+                for acq_name in ALL_ACQS:
+                    tag = f"task-{task}_acq-{acq_name}"
+                    zmap_cands = glob.glob(os.path.join(glm_base_dir, f"sub-{ID}", tag,
+                                                        f"sub-{ID}_{tag}*trial_RH-rest*inTemplate.nii.gz"))
+                    if not zmap_cands:
+                        continue
+                    zvals = nib.load(sorted(zmap_cands)[-1]).get_fdata()[pam50_mask]
+                    zvals = zvals[np.isfinite(zvals)]
+                    if zvals.size == 0:
+                        continue
+                    bold_records.append({"subject": ID, "task": task, "acq": acq_name,
+                                         "peak_z": float(np.max(zvals)),
+                                         "n_active": int(np.sum(zvals > Z_THRESHOLD))})
+        bold_df = pd.DataFrame(bold_records)
+        bold_df.to_csv(bold_csv, index=False)
+        print(f"Saved: {bold_csv}", flush=True)
 else:
     bold_df = pd.read_csv(bold_csv)
+
+# --- 7c. MI with T2* GRE ---
+mi_csv  = os.path.join(out_dir, "mi_t2star.csv")
+mi_cache = os.path.join(out_dir, "t2star_pam50")
+os.makedirs(mi_cache, exist_ok=True)
+
+def _compute_mi(x, y, bins=MI_BINS):
+    hist2d, _, _ = np.histogram2d(x, y, bins=bins)
+    pxy = hist2d / hist2d.sum()
+    px  = pxy.sum(axis=1, keepdims=True)
+    py  = pxy.sum(axis=0, keepdims=True)
+    mask = pxy > 0
+    return float(np.sum(pxy[mask] * np.log(pxy[mask] / (px * py)[mask])))
+
+def _t2star_in_pam50(ID):
+    out_path = os.path.join(mi_cache, f"sub-{ID}_T2star_inPAM50.nii.gz")
+    if os.path.exists(out_path) and not redo:
+        return out_path
+    t2star = os.path.join(path_data, f"sub-{ID}", "anat", f"sub-{ID}_T2star.nii.gz")
+    warp   = os.path.join(preprocessing_dir_compare.format(ID), "anat", "sct_register_to_template",
+                          f"sub-{ID}_from-anat_to-PAM50_mode-image_xfm.nii.gz")
+    template = os.path.join(path_code, "template", config["PAM50_t2"])
+    if not os.path.exists(t2star) or not os.path.exists(warp):
+        return None
+    ret = os.system(f"sct_apply_transfo -i {t2star} -d {template} -w {warp} -o {out_path} -x spline")
+    return out_path if ret == 0 and os.path.exists(out_path) else None
+
+if not os.path.exists(mi_csv) or redo:
+    if not os.path.exists(pam50_mask_path):
+        print(f"WARNING: PAM50 cord mask not found, skipping MI.", flush=True)
+        mi_df = pd.DataFrame()
+    else:
+        pam50_mask_data = nib.load(pam50_mask_path).get_fdata() > 0
+        mi_records = []
+        for ID in IDs:
+            t2star_pam50 = _t2star_in_pam50(ID)
+            if t2star_pam50 is None:
+                print(f"WARNING: Could not warp T2*w for sub-{ID}, skipping.", flush=True)
+                continue
+            t2_vals = nib.load(t2star_pam50).get_fdata()[pam50_mask_data]
+            for task in all_tasks:
+                for acq_name in ALL_ACQS:
+                    tag = f"task-{task}_acq-{acq_name}"
+                    epi_cands = glob.glob(os.path.join(
+                        preprocessing_dir_compare.format(ID), "func", tag,
+                        "sct_register_multimodal",
+                        f"sub-{ID}_{tag}*_bold_moco_mean_coreg_in_PAM50.nii.gz"))
+                    if not epi_cands:
+                        continue
+                    epi_vals = nib.load(sorted(epi_cands)[-1]).get_fdata()[pam50_mask_data]
+                    valid = np.isfinite(epi_vals) & np.isfinite(t2_vals) & (epi_vals > 0)
+                    if valid.sum() < 10:
+                        continue
+                    mi_records.append({"subject": ID, "task": task, "acq": acq_name,
+                                       "mi": _compute_mi(epi_vals[valid], t2_vals[valid])})
+        mi_df = pd.DataFrame(mi_records)
+        mi_df.to_csv(mi_csv, index=False)
+        print(f"Saved: {mi_csv}", flush=True)
+else:
+    mi_df = pd.read_csv(mi_csv)
+
+# --- 7d. tSNR triplet figures ---
+for task in df_tsnr["task"].unique():
+    df_task = df_tsnr[df_tsnr["task"] == task]
+    for acq1, acq2, acq3, shim_label in SHIM_TRIPLETS:
+        fig_path = os.path.join(fig_dir_compare, f"tsnr_sc_{shim_label}_{task}_triplet.png")
+        if os.path.exists(fig_path) and not redo:
+            print(f"Figure already exists: {fig_path}", flush=True)
+            continue
+        d = {a: df_task[df_task["acq"] == a].set_index("subject")["tsnr_sc"] for a in [acq1, acq2, acq3]}
+        common_all = d[acq1].index.intersection(d[acq2].index).intersection(d[acq3].index)
+        common_23  = d[acq2].index.intersection(d[acq3].index)
+        if len(common_23) < 2:
+            print(f"WARNING: Only {len(common_23)} paired for tSNR {shim_label} task-{task}, skipping.", flush=True)
+            continue
+        _, _, pstr23 = wilcoxon_str(d[acq2].loc[common_23].values, d[acq3].loc[common_23].values)
+        try:
+            fig, ax = plt.subplots(figsize=(4, 4.5))
+            _triplet_fig(ax, d, [acq1, acq2, acq3], [0, 1, 2], common_all, common_23, pstr23,
+                         "Mean tSNR within SC mask",
+                         f"tSNR: 1mm vs 3mm  ({shim_label}, task-{task})\nn={len(common_23)} paired")
+            fig.tight_layout(); fig.savefig(fig_path, dpi=150, bbox_inches="tight"); plt.close(fig)
+            print(f"Saved: {fig_path}", flush=True)
+        except Exception as e:
+            print(f"WARNING: tSNR triplet ({shim_label} task-{task}): {e}", flush=True)
+
+# --- 7e. BOLD sensitivity triplet figures ---
+if not bold_df.empty:
     for metric, ylabel in [("peak_z", "Peak z-score within PAM50 SC mask"),
                             ("n_active", f"Suprathreshold voxels (z > {Z_THRESHOLD})")]:
         for task in bold_df["task"].unique():
@@ -424,94 +562,69 @@ else:
                 _, _, pstr23 = wilcoxon_str(d[acq2].loc[common_23].values, d[acq3].loc[common_23].values)
                 try:
                     fig, ax = plt.subplots(figsize=(4, 4.5))
-                    _triplet_fig(ax, d, [acq1, acq2, acq3], [0, 1, 2], common_all, common_23, pstr23,
-                                 ylabel,
+                    _triplet_fig(ax, d, [acq1, acq2, acq3], [0, 1, 2], common_all, common_23, pstr23, ylabel,
                                  f"{metric}: 1mm vs 3mm  ({shim_label}, task-{task})\nn={len(common_23)} paired")
-                    fig.tight_layout()
-                    fig.savefig(fig_path, dpi=150, bbox_inches="tight")
-                    plt.close(fig)
+                    fig.tight_layout(); fig.savefig(fig_path, dpi=150, bbox_inches="tight"); plt.close(fig)
                     print(f"Saved: {fig_path}", flush=True)
                 except Exception as e:
-                    print(f"WARNING: {metric} triplet figure failed ({shim_label} task-{task}): {e}", flush=True)
+                    print(f"WARNING: {metric} triplet ({shim_label} task-{task}): {e}", flush=True)
 
-# --- MI with T2* 4-condition figure ---
-mi_csv = os.path.join(out_dir, "mi_t2star.csv")
-if not os.path.exists(mi_csv):
-    print(f"INFO: {mi_csv} not found — run --compare first. Skipping MI figure.", flush=True)
-else:
-    mi_df = pd.read_csv(mi_csv)
-    MI_4COND = [
-        ("shimBase+3mm",                 "rest",  0,    "#2166AC", "shimBase\n3mm"),
-        ("shimSlice+3mm",                "motor", 1,    "#74ADD1", "shimSlice\n3mm"),
-        ("shimBase+1mm+sms2",            "rest",  2.5,  "#D73027", "shimBase\n1mm"),
-        ("shimSlice+1mm+sms2+smooth3mm", "motor", 3.5,  "#F4A582", "shimSlice\n1mm"),
-    ]
-    fig_path_4 = os.path.join(fig_dir_compare, "mi_t2star_4cond.png")
-    if os.path.exists(fig_path_4) and not redo:
-        print(f"Figure already exists: {fig_path_4}", flush=True)
-    else:
-        try:
-            mi_ser = {}
-            for acq_name, task, *_ in MI_4COND:
-                sub_df = mi_df[(mi_df["task"] == task) & (mi_df["acq"] == acq_name)]
-                mi_ser[acq_name] = sub_df.set_index("subject")["mi"]
+# --- 7f. MI 4-condition figure ---
+MI_4COND = [
+    ("shimBase+3mm",                 "rest",  0,    "#2166AC", "shimBase\n3mm"),
+    ("shimSlice+3mm",                "motor", 1,    "#74ADD1", "shimSlice\n3mm"),
+    ("shimBase+1mm+sms2",            "rest",  2.5,  "#D73027", "shimBase\n1mm"),
+    ("shimSlice+1mm+sms2+smooth3mm", "motor", 3.5,  "#F4A582", "shimSlice\n1mm"),
+]
+fig_path_4 = os.path.join(fig_dir_compare, "mi_t2star_4cond.png")
+if not mi_df.empty and (not os.path.exists(fig_path_4) or redo):
+    try:
+        mi_ser = {c[0]: mi_df[(mi_df["task"] == c[1]) & (mi_df["acq"] == c[0])].set_index("subject")["mi"]
+                  for c in MI_4COND}
+        base3_acq, slice3_acq = MI_4COND[0][0], MI_4COND[1][0]
+        base1_acq, slice1_acq = MI_4COND[2][0], MI_4COND[3][0]
+        common_3mm       = mi_ser[base3_acq].index.intersection(mi_ser[slice3_acq].index)
+        common_1mm       = mi_ser[base1_acq].index.intersection(mi_ser[slice1_acq].index)
+        common_slice_res = mi_ser[slice3_acq].index.intersection(mi_ser[slice1_acq].index)
 
-            base3_acq, slice3_acq = MI_4COND[0][0], MI_4COND[1][0]
-            base1_acq, slice1_acq = MI_4COND[2][0], MI_4COND[3][0]
-            common_3mm       = mi_ser[base3_acq].index.intersection(mi_ser[slice3_acq].index)
-            common_1mm       = mi_ser[base1_acq].index.intersection(mi_ser[slice1_acq].index)
-            common_slice_res = mi_ser[slice3_acq].index.intersection(mi_ser[slice1_acq].index)
-
-            fig, ax = plt.subplots(figsize=(5.5, 4.5))
-            xpos_list  = [c[2] for c in MI_4COND]
-            color_list = [c[3] for c in MI_4COND]
-            label_list = [c[4] for c in MI_4COND]
-            vals_all   = [mi_ser[c[0]].dropna().values for c in MI_4COND]
-
-            bp = ax.boxplot(vals_all, positions=xpos_list, widths=0.45,
-                            patch_artist=True, showfliers=False,
-                            medianprops=dict(color="white", linewidth=2))
-            for patch, col in zip(bp["boxes"], color_list):
-                patch.set_facecolor(col); patch.set_alpha(0.5)
-            for i, (wh, ca) in enumerate(zip(bp["whiskers"], bp["caps"])):
-                wh.set_color(color_list[i // 2]); wh.set_alpha(0.6)
-                ca.set_color(color_list[i // 2]); ca.set_alpha(0.6)
-
-            for sub in common_3mm:
-                ax.plot([0, 1], [mi_ser[base3_acq][sub], mi_ser[slice3_acq][sub]],
-                        "o-", color="dimgray", alpha=0.5, linewidth=1, markersize=4, zorder=3)
-            for sub in common_1mm:
-                ax.plot([2.5, 3.5], [mi_ser[base1_acq][sub], mi_ser[slice1_acq][sub]],
-                        "o-", color="dimgray", alpha=0.5, linewidth=1, markersize=4, zorder=3)
-
-            ax.set_ylim(bottom=0)
-            y_max = max(v.max() for v in vals_all if v.size > 0) * 1.50
-            ax.set_ylim(top=y_max)
-
-            bracket_inner_y = y_max * 0.83
-            bracket_outer_y = y_max * 0.96
-            for (a, b, common), (bx1, bx2), by in [
-                ((base3_acq,  slice3_acq, common_3mm),       (0,   1),   bracket_inner_y),
-                ((base1_acq,  slice1_acq, common_1mm),       (2.5, 3.5), bracket_inner_y),
-                ((slice3_acq, slice1_acq, common_slice_res), (1,   3.5), bracket_outer_y),
-            ]:
-                if len(common) >= 2:
-                    _, _, ps = wilcoxon_str(mi_ser[a].loc[common].values, mi_ser[b].loc[common].values)
-                    draw_bracket(ax, bx1, bx2, by, ps, fontsize=8)
-
-            ax.set_xticks(xpos_list)
-            ax.set_xticklabels(label_list, fontsize=8.5)
-            ax.set_ylabel("Mutual Information with T2*w GRE\n(PAM50 space, within SC mask)", fontsize=9)
-            ax.set_title("MI with T2*w: shimBase vs shimSlice\n(3mm and 1mm acquisitions)", fontsize=9)
-            ax.set_xlim(-0.6, 4.1)
-            ax.spines["top"].set_visible(False)
-            ax.spines["right"].set_visible(False)
-            fig.tight_layout()
-            fig.savefig(fig_path_4, dpi=150, bbox_inches="tight")
-            plt.close(fig)
-            print(f"Saved: {fig_path_4}", flush=True)
-        except Exception as e:
-            print(f"WARNING: MI 4-condition figure failed: {e}", flush=True)
+        fig, ax = plt.subplots(figsize=(5.5, 4.5))
+        xpos_list = [c[2] for c in MI_4COND]; color_list = [c[3] for c in MI_4COND]
+        label_list = [c[4] for c in MI_4COND]
+        vals_all   = [mi_ser[c[0]].dropna().values for c in MI_4COND]
+        bp = ax.boxplot(vals_all, positions=xpos_list, widths=0.45, patch_artist=True,
+                        showfliers=False, medianprops=dict(color="white", linewidth=2))
+        for patch, col in zip(bp["boxes"], color_list):
+            patch.set_facecolor(col); patch.set_alpha(0.5)
+        for i, (wh, ca) in enumerate(zip(bp["whiskers"], bp["caps"])):
+            wh.set_color(color_list[i // 2]); wh.set_alpha(0.6)
+            ca.set_color(color_list[i // 2]); ca.set_alpha(0.6)
+        for sub in common_3mm:
+            ax.plot([0, 1], [mi_ser[base3_acq][sub], mi_ser[slice3_acq][sub]],
+                    "o-", color="dimgray", alpha=0.5, linewidth=1, markersize=4, zorder=3)
+        for sub in common_1mm:
+            ax.plot([2.5, 3.5], [mi_ser[base1_acq][sub], mi_ser[slice1_acq][sub]],
+                    "o-", color="dimgray", alpha=0.5, linewidth=1, markersize=4, zorder=3)
+        ax.set_ylim(bottom=0)
+        y_max = max(v.max() for v in vals_all if v.size > 0) * 1.50
+        ax.set_ylim(top=y_max)
+        bracket_inner_y, bracket_outer_y = y_max * 0.83, y_max * 0.96
+        for (a, b, common), (bx1, bx2), by in [
+            ((base3_acq,  slice3_acq, common_3mm),       (0,   1),   bracket_inner_y),
+            ((base1_acq,  slice1_acq, common_1mm),       (2.5, 3.5), bracket_inner_y),
+            ((slice3_acq, slice1_acq, common_slice_res), (1,   3.5), bracket_outer_y),
+        ]:
+            if len(common) >= 2:
+                _, _, ps = wilcoxon_str(mi_ser[a].loc[common].values, mi_ser[b].loc[common].values)
+                draw_bracket(ax, bx1, bx2, by, ps, fontsize=8)
+        ax.set_xticks(xpos_list); ax.set_xticklabels(label_list, fontsize=8.5)
+        ax.set_ylabel("Mutual Information with T2*w GRE\n(PAM50 space, within SC mask)", fontsize=9)
+        ax.set_title("MI with T2*w: shimBase vs shimSlice\n(3mm and 1mm acquisitions)", fontsize=9)
+        ax.set_xlim(-0.6, 4.1)
+        ax.spines["top"].set_visible(False); ax.spines["right"].set_visible(False)
+        fig.tight_layout(); fig.savefig(fig_path_4, dpi=150, bbox_inches="tight"); plt.close(fig)
+        print(f"Saved: {fig_path_4}", flush=True)
+    except Exception as e:
+        print(f"WARNING: MI 4-condition figure failed: {e}", flush=True)
 
 print("", flush=True)
 print("=== figures_workflow done ===", flush=True)
