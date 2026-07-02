@@ -83,29 +83,15 @@ print("")
 # Compute individual level
 tsnr_ana=postprocess.TSNR_main(config, IDs,redo)
 tsnr_ana.generate_tsnr_maps_and_csv()
+tsnr_ana.generate_tsnr_maps_derived()
 
 print("=== tSNR script Done ===", flush=True)
 print("===================================", flush=True)
 print("")
 
 #------------------------------------------------------------------
-#------ II. Plot EPI comparison
+#------ II. Plot EPI comparison (moved to figures_workflow.py)
 #------------------------------------------------------------------
-print("=== Epi comparison script Start ===", flush=True)
-print("===================================", flush=True)
-print("")
-
-# --- Group figure (IDs_EPIcomp only)
-# EPI comparison figure
-try:
-    fig_epi_comparison = postprocess.EpiComparison(config, IDs, redo)
-    fig_epi_comparison.create_figure(show_avg=False)
-except Exception as e:
-    print(f"WARNING: EPI comparison figure skipped: {e}", flush=True)
-
-print("=== EPI comparison script Done ===", flush=True)
-print("===================================", flush=True)
-print("")
 #------------------------------------------------------------------
 #------ III. Run First level
 #------------------------------------------------------------------
@@ -341,46 +327,4 @@ if not os.path.exists(common_mask_fname) or redo:
     z_size = z_max - z_min + 1
 
 
-#------------------------------------------------------------------
-#------ III.  Plot first level results: shimBase vs. shimSlice
-#------------------------------------------------------------------
-i_fnames_by_runs = []
-for ID in IDs:
-    # Check if there are multiple runs for this participant
-    i_fnames_runs = []
-    for task_name in config["design_exp"]["task_names"]:
-        for acq_name in config["design_exp"]["acq_names"]:
-            tag="task-" + task_name + "_acq-" + acq_name
-            raw_func=sorted(glob.glob(os.path.join(config["raw_dir"], f'sub-{ID}', 'func', f'sub-{ID}_{tag}_*bold.nii.gz')))
-            if not raw_func:
-                continue
-            if len(raw_func)==2 and tag=="task-motor_acq-shimSlice+3mm":
-                for fname in raw_func:
-                    match = re.search(r"_?(run-\d+)", fname)
-                    run_name = match.group(1)
-                    matches = glob.glob(os.path.join(first_level_dir.format("glm",ID), f"{tag}", f"*{tag}*{run_name}*trial_RH-rest*inTemplate.nii.gz"))
-                    if matches:
-                        i_fnames_runs.append(matches[0])
-            else:
-                match = re.search(r"_?(run-\d+)", raw_func[0])
-                run_name = match.group(1) if match else ""
-                matches = glob.glob(os.path.join(first_level_dir.format("glm",ID), f"{tag}", f"*{tag}*{run_name}*trial_RH-rest*inTemplate.nii.gz"))
-                if matches:
-                    i_fnames_runs.append(matches[0])
-
-    if i_fnames_runs:
-        i_fnames_by_runs.append(i_fnames_runs)
-
-try:
-    figures.plot_first_level_maps(i_fnames=i_fnames_by_runs,
-                                         output_fname=os.path.join(fig_dir, f"first_level_task_by_runs_n{len(i_fnames_by_runs)}.png"),
-                                          background_fname=os.path.join(path_code, "template", config["PAM50_t2"]),
-                                          mask_fname=common_mask_fname,
-                                          titles=["shimBase","shimSlice","shimSlice"],
-                                         #underlay_fname=os.path.join(path_code, "template", config["PAM50_cord"]),
-                                          task_name=tag,
-                                          participant_ids=IDs,
-                                          verbose=True,
-                                          redo=redo)
-except Exception as e:
-    print(f"WARNING: First-level figure skipped: {e}", flush=True)
+# Figure generation moved to figures_workflow.py (run with --figures).
