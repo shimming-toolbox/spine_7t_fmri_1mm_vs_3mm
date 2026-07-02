@@ -1,6 +1,9 @@
 #!/bin/bash
 # Keep the screen window open after the script exits (success or error) so logs can be reviewed.
-trap 'echo ""; echo "=== Script exited (code $?). Type '\''exit'\'' to close screen. ==="; bash' EXIT
+# Only active inside a screen session ($STY is set by screen) to avoid dropping the user out of their conda env.
+if [ -n "$STY" ] || [ -n "$WINDOW" ]; then
+    trap 'echo ""; echo "=== Script exited (code $?). Type '\''exit'\'' to close screen. ==="; bash' EXIT
+fi
 
 # Capture full invocation before argument parsing consumes $@
 INVOCATION_ARGS="$*"
