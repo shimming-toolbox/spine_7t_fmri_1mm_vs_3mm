@@ -2,6 +2,9 @@
 # Keep the screen window open after the script exits (success or error) so logs can be reviewed.
 trap 'echo ""; echo "=== Script exited (code $?). Type '\''exit'\'' to close screen. ==="; bash' EXIT
 
+# Capture full invocation before argument parsing consumes $@
+INVOCATION_ARGS="$*"
+
 # --------------------------
 # User parameters
 # --------------------------
@@ -71,7 +74,7 @@ cd log || { echo "ERROR: could not cd into log/"; exit 1; }
 timestamp=$(date +"%Y%m%d_%H%M%S")
 
 # Save the full invocation so it can be recovered after a crash (cat log/last_run.sh)
-echo "bash $(realpath "$0") $*" > last_run.sh
+echo "bash $(realpath "$0") ${INVOCATION_ARGS}" > last_run.sh
 echo "# Run on: $(date)" >> last_run.sh
 
 # --------------------------
