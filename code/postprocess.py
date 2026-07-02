@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 import nibabel as nib
 import pingouin as pg
+import re
 import warnings
 
 # nilearn
@@ -449,7 +450,7 @@ class GLM_main:
 
             FD_values["IDs"].append(ID)
             FD_values["mean_FD"].append(mean_FD)
-            FD_values["acq"].append(task_name.split("acq-")[1].split("+")[0])
+            FD_values["acq"].append(task_name.split("acq-")[1])
         df_FD = pd.DataFrame(FD_values)
 
         if output_file is None:
@@ -607,26 +608,46 @@ class TSNR_main:
                     for metric in ["tsnr", "ssnr"]:
                         values = tsnr_mean if metric=="tsnr" else ssnr
                         if len(dfs[metric]) == 0:
-                            dfs[metric] = pd.DataFrame([[ID, task, acq_name.split("+")[0], values]], columns=dfs[metric].columns)
+                            dfs[metric] = pd.DataFrame([[ID, task, acq_name, values]], columns=dfs[metric].columns)
                         else:
                             dfs[metric] = pd.concat(
-                                [pd.DataFrame([[ID, task, acq_name.split("+")[0], values]], columns=dfs[metric].columns), dfs[metric]], ignore_index=True)
+                                [pd.DataFrame([[ID, task, acq_name, values]], columns=dfs[metric].columns), dfs[metric]], ignore_index=True)
 
         # Keep only 'rest' rows for IDs that have both 'motor' and 'rest'
         for metric in ["tsnr","ssnr"]:
 
+            # Find pairs
+            acqs = set(dfs[metric]["acq"])
+            pairs = []
+            while len(acqs) > 0:
+                acq = acqs.pop()
+                found_pair = [a for a in acqs if (a.strip('shimBase') == acq.strip('shimBase') or
+                                                  a.strip('shimBase') == acq.strip('shimSlice') or
+                                                  a.strip('shimSlice') == acq.strip('shimBase') or
+                                                  a.strip('shimSlice') == acq.strip('shimSlice'))]
+                if not len(found_pair) == 1:
+                    raise RuntimeError("Did not find a pair")
+                pairs.append((acq, found_pair[0]))
+                acqs.remove(found_pair[0])
+
             if not os.path.exists(self.fname_metrics[metric].split(".csv")[0]+"_reduced.csv") or self.redo:
-                ids_with_both = dfs[metric].groupby('IDs')['task'].apply(
+                ids_with_both = dfs[metric].groupby(['IDs', 'acq'])['task'].apply(
                     lambda x: set(['motor', 'rest']).issubset(set(x))
                 )
                 ids_with_both = ids_with_both[ids_with_both].index
-                df_reduced = dfs[metric][~((dfs[metric]['IDs'].isin(ids_with_both)) & (dfs[metric]['task'] == 'motor'))]
+                keep_mask = dfs[metric].set_index(['IDs', 'acq']).index.isin(ids_with_both)
+                df_reduced = dfs[metric][~(keep_mask & (dfs[metric]['task'] == 'motor'))]
                 df_reduced.to_csv(self.fname_metrics[metric].split(".csv")[0]+"_reduced.csv", index=False)
-            pair_ttest(csv_files=[self.fname_metrics[metric].split(".csv")[0]+"_reduced.csv"], value_col=metric, redo=self.redo)
 
             if not os.path.exists(self.fname_metrics[metric]) or self.redo:
                 dfs[metric].to_csv(self.fname_metrics[metric], index=False)
-                pair_ttest(csv_files=[self.fname_metrics[metric]], value_col=metric, redo=self.redo)
+
+            if len(pairs) > 1:
+                pairs.append((re.compile(r"shimBase*"), re.compile(r"shimSlice*")))
+            pair_ttest(csv_files=[self.fname_metrics[metric].split(".csv")[0]+"_reduced.csv"], conds=pairs, value_col=metric, redo=self.redo)
+            pair_ttest(csv_files=[self.fname_metrics[metric]], conds=pairs, value_col=metric, redo=self.redo)
+
+
 
     def generate_average_tsnr_in_pam50(self, IDs, acq_name=None,task_name=None,tsnr_fnames=None,seg_fnames=None, warp_fnames=None,fname_mask=None, redo=False):
         
@@ -1588,8 +1609,18 @@ def make_legend_arrow(legend, orig_handle,
     p = mpatches.FancyArrow(0, 0.5*height, width, 0, length_includes_head=True, head_width=0.75*height )
     return p
 
-def pair_ttest(df=None, csv_files=None, output_fname=None,index='IDs', value_col='tSNR', acq_col='acq', cond1='shimSlice', cond2='shimBase',task_filter=None, task_col='task', redo=False):
+def pair_ttest(df=None, csv_files=None, output_fname=None,index='IDs', value_col='tSNR', acq_col='acq', conds=(), task_filter=None, task_col='task', redo=False):
+        """
 
+        Parameters
+        ----------
+        conds: List containing tuples of length 2. Each representing a condition.
+
+
+        Returns
+        -------
+
+        """
         if output_fname==None and csv_files:
             output_fname=csv_files[0].split('.csv')[0] + "_stats.csv"
 
@@ -1597,7 +1628,7 @@ def pair_ttest(df=None, csv_files=None, output_fname=None,index='IDs', value_col
             if csv_files:
                 if len(csv_files) > 1:
                     df_list = [pd.read_csv(f) for f in csv_files]
-                    df = pd.concat(df_list, ignore_index=True) # contactenate all dataframes into one
+                    df = pd.concat(df_list, ignore_index=True) # contatenate all dataframes into one
                 else:
                     df = pd.read_csv(csv_files[0])
 
@@ -1605,42 +1636,66 @@ def pair_ttest(df=None, csv_files=None, output_fname=None,index='IDs', value_col
             if task_filter:
                 df = df[df[task_col] == task_filter]
 
-            # Pivot to get one column per condition
-            df_pivot = df.pivot_table(index=index, columns=acq_col, values=value_col)
-            df_pivot = df_pivot.dropna(subset=[cond1, cond2])
+            output_df = pd.DataFrame()
 
-            # Paired t-test
-            t_stat, p_value = stats.ttest_rel(df_pivot[cond1], df_pivot[cond2])
-            degrees_of_freedom = len(df_pivot) - 1
+            for cond1, cond2 in conds:
+                cond1_label = cond1.pattern if isinstance(cond1, re.Pattern) else cond1
+                cond2_label = cond2.pattern if isinstance(cond2, re.Pattern) else cond2
 
-            # Significance stars
-            if p_value < 0.001:
-                stars = '***'
-            elif p_value < 0.01:
-                stars = '**'
-            elif p_value < 0.05:
-                stars = '*'
-            else:
-                stars = 'ns'
+                df_filtered = df.copy()
+                if isinstance(cond1, re.Pattern):
+                    mask1 = df_filtered[acq_col].str.contains(cond1, na=False)
+                else:
+                    mask1 = df_filtered[acq_col] == cond1
 
-            # Build results dataframe
-            results = pd.DataFrame([{
-                'cond1'         : cond1,
-                'cond2'         : cond2,
-                'N_pairs'       : len(df_pivot),
-                f'mean_{cond1}'    : df_pivot[cond1].mean(),
-                f'std_{cond1}'     : df_pivot[cond1].std(),
-                f'mean_{cond2}'    : df_pivot[cond2].mean(),
-                f'std_{cond2}'     : df_pivot[cond2].std(),
-                't_stat'        : t_stat,
-                'df'            : degrees_of_freedom,
-                'p_value'       : p_value,
-                'significance'  : stars,
-            }])
+                if isinstance(cond2, re.Pattern):
+                    mask2 = df_filtered[acq_col].str.contains(cond2, na=False)
+                else:
+                    mask2 = df_filtered[acq_col] == cond2
+
+                # Normalize regex matches so the pivot columns use the requested condition names.
+                df_filtered.loc[mask1, acq_col] = cond1_label
+                df_filtered.loc[mask2, acq_col] = cond2_label
+                df_filtered = df_filtered.loc[mask1 | mask2].copy()
+
+                # Pivot to get one column per condition
+                df_pivot = df_filtered.pivot_table(index=index, columns=acq_col, values=value_col)
+                df_pivot = df_pivot.dropna(subset=[cond1_label, cond2_label])
+
+                # Paired t-test
+                t_stat, p_value = stats.ttest_rel(df_pivot[cond1_label], df_pivot[cond2_label])
+                degrees_of_freedom = len(df_pivot) - 1
+
+                # Significance stars
+                if p_value < 0.001:
+                    stars = '***'
+                elif p_value < 0.01:
+                    stars = '**'
+                elif p_value < 0.05:
+                    stars = '*'
+                else:
+                    stars = 'ns'
+
+                # Build results dataframe
+                results = pd.DataFrame([{
+                    'cond1'         : cond1_label,
+                    'cond2'         : cond2_label,
+                    'N_pairs'       : len(df_pivot),
+                    f'mean_cond1'    : df_pivot[cond1_label].mean(),
+                    f'std_cond1'     : df_pivot[cond1_label].std(),
+                    f'mean_cond2'    : df_pivot[cond2_label].mean(),
+                    f'std_cond2'     : df_pivot[cond2_label].std(),
+                    't_stat'        : t_stat,
+                    'df'            : degrees_of_freedom,
+                    'p_value'       : p_value,
+                    'significance'  : stars,
+                }])
+                output_df = pd.concat([output_df, results], ignore_index=True)
+
             if task_filter:
-                results['task_filter'] = task_filter if task_filter else 'all'
+                output_df['task_filter'] = task_filter if task_filter else 'all'
 
-            results.to_csv(output_fname, index=False)
-            print(results.to_string(index=False))
+            output_df.to_csv(output_fname, index=False)
+            print(output_df.to_string(index=False))
 
         return pd.read_csv(output_fname)
