@@ -50,19 +50,14 @@ if tasks != [""]:
 
 #Import scripts
 sys.path.append(os.path.join(path_code, "code")) # Change this line according to your directory
-import postprocess, preprocess, figures
+import postprocess, preprocess
 
 glm_ana = postprocess.GLM_main(config,IDs=IDs)
 preprocess_Sc = preprocess.Preprocess_Sc(config,IDs=IDs)
 tsnr_ana = postprocess.TSNR_main(config, IDs,redo)
-figures = figures.Figures_main(config, IDs=IDs)
 
 # initialize directories
 preprocessing_dir = os.path.join(config["raw_dir"], config["preprocess_dir"]["main_dir"])
-denoising_dir= os.path.join(config["raw_dir"], config["denoising"]["dir"])
-manual_dir = os.path.join(config["raw_dir"], config["manual_dir"])
-main_fig_dir = os.path.join(config["raw_dir"], "derivatives", "processing", "figures")
-fig_task_dir = os.path.join(main_fig_dir, "task")
 first_level_dir = os.path.join(config["raw_dir"], config["first_level"]["dir"])
 second_level_dir = os.path.join(config["raw_dir"], config["second_level"]["dir"])
 
@@ -71,9 +66,6 @@ mask = os.path.join(first_level_dir.format('glm',"").split("sub")[0], "common_ma
 #------------------------------------------------------------------
 #------ Compute average tSNR
 #------------------------------------------------------------------
-output_fig = os.path.join(config["raw_dir"], config["figures_dir"]["main_dir"], "second_level")
-os.makedirs(output_fig, exist_ok=True)
-box_plot = {}
 for acq_name in config["design_exp"]["acq_names"]:
     tsnr_id_fname = []
     cord_seg_file = []
@@ -116,25 +108,7 @@ for acq_name in config["design_exp"]["acq_names"]:
         warp_fnames=warp_file,
         fname_mask=mask)
 
-    for metric in ["tsnr", "ssnr"]:
-        csv_matches = glob.glob(os.path.join(snr_path.split("sub")[0], f"{metric}*_metrics_reduced.csv"))
-        stat_matches = glob.glob(os.path.join(snr_path.split("sub")[0], f"{metric}*_metrics_reduced_stats.csv"))
-        if not csv_matches or not stat_matches:
-            print(f"WARNING: Missing {metric} CSV for acq-{acq_name}, skipping boxplot.", flush=True)
-            continue
-        (ymin, ymax) = (6, 17) if metric == "tsnr" else (1.5, 4.5)
-        y_label = "temporal SNR" if metric == "tsnr" else "spatial SNR"
-        try:
-            box_plot[metric] = figures.boxplots(
-                csv_file=csv_matches[0],
-                output_fname=os.path.join(output_fig, f"{len(valid_IDs)}_{metric}_boxplot.png"),
-                ymin=ymin, ymax=ymax, stats_file=stat_matches[0],
-                specify_y_label=y_label,
-                x_data="acq", x_order=["shimBase", "shimSlice"],
-                indiv_values=True,
-                y_data=metric, redo=redo)
-        except Exception as e:
-            print(f"WARNING: {metric} boxplot failed for acq-{acq_name}: {e}", flush=True)
+    # Boxplot figures moved to figures_workflow.py (run with --figures).
 
 # Also average tSNR for derived (avg3mm) acquisitions, needed for the 3mm vs avg3mm map comparison
 avg_acq_names = {k: v for k, v in config.get("derived_acq", {}).items() if "n_slices_avg" in v}
@@ -266,89 +240,7 @@ for cluster_corr in [0.01,0.001]:
                 print(f'=== Second level done for : {tag}, cluster: {cluster_corr} vox: {vox_thr} | elapsed: {_time.time()-_t_task:.1f}s ===', flush=True)
                 print("=========================================", flush=True)
 
-#------------------------------------------------------------------
-#------ Plot group level tSNR and GLM
-#------------------------------------------------------------------
-# --- Plot tSNR: native 3mm vs avg3mm, separately for shimBase and shimSlice ---
-try:
- for shim_label in ["shimBase", "shimSlice"]:
-    acq_3mm   = next((a for a in config["design_exp"]["acq_names"] if shim_label in a and "3mm" in a), None)
-    acq_avg3mm = next((a for a in avg_acq_names if shim_label in a), None)
-    if acq_3mm is None or acq_avg3mm is None:
-        print(f"INFO: Could not find 3mm or avg3mm acq for {shim_label}, skipping tSNR map.", flush=True)
-        continue
-    f_3mm   = os.path.join(second_level_dir.format("snr"), f"tsnr_n{len(IDs)}_{acq_3mm}_avg_in_PAM50.nii.gz")
-    f_avg3mm = tsnr_avg3mm.get(acq_avg3mm)
-    if not os.path.exists(f_3mm) or f_avg3mm is None or not os.path.exists(f_avg3mm):
-        print(f"INFO: Missing tSNR avg map for {shim_label}, skipping.", flush=True)
-        continue
-    tsnr_plot = figures.plot_fmri_maps(
-        i_fnames=[f_3mm, f_avg3mm],
-        output_fname=os.path.join(output_fig, f"n{len(IDs)}_tsnr_{shim_label}_3mm_vs_avg3mm_map.png"),
-        stat_min=5, stat_max=16, cmap='turbo', cbar_label='tSNR',
-        titles=[f"{shim_label} 3mm", f"{shim_label} avg3mm"],
-        background_fname=os.path.join(path_code, "template", config["PAM50_t2"]), redo=redo)
-
-except Exception as e:
-    print(f"WARNING: tSNR group figure failed: {e}", flush=True)
-
-# --- Plot GLM ---
-try:
-    i_fnames_glm_pair = {}
-    glm_plot={};glm_axial_plot={};dist_plot={};bar_plot={}
-    task_name = "motor"
-    for cluster_corr in [0.01,0.001]:
-        i_fnames_glm_pair[cluster_corr] = {}
-        glm_plot[cluster_corr] = {}; glm_axial_plot[cluster_corr] = {}; dist_plot[cluster_corr] = {}; bar_plot[cluster_corr]={}
-        z_slices=[280,266,256,243,225]
-        for vox_thr in [0.005]:
-            i_fnames_glm_pair[cluster_corr][vox_thr] = []
-            for acq_name in config["design_exp"]["acq_names"]:
-                tag = "task-" + task_name + "_acq-" + acq_name
-                candidate = os.path.join(second_level_dir.format("glm"), f"cluster_p{cluster_corr}_vox{vox_thr}_perm10000", tag, f"n{len(IDs)}_{tag}_t_clustercorrected.nii.gz")
-                if os.path.exists(candidate):
-                    i_fnames_glm_pair[cluster_corr][vox_thr].append(candidate)
-
-            if not i_fnames_glm_pair[cluster_corr][vox_thr]:
-                print(f"WARNING: No second-level GLM maps found for cluster_corr={cluster_corr}, skipping figures.", flush=True)
-                continue
-
-            glm_plot[cluster_corr][vox_thr] = figures.plot_fmri_maps(
-                i_fnames=i_fnames_glm_pair[cluster_corr][vox_thr],
-                output_fname=os.path.join(output_fig, f"n{len(IDs)}_glm_{cluster_corr}_vox{vox_thr}_avg_map.png"),
-                stat_min=3, stat_max=6, cbar_label='t-value', z_slices=z_slices,
-                background_fname=os.path.join(path_code, "template", config["PAM50_t2"]),
-                underlay_fname=os.path.join(path_code, "template", config["PAM50_gm"]), redo=redo)
-
-            glm_axial_plot[cluster_corr][vox_thr] = figures.plot_fmri_maps_axial(
-                i_fnames=i_fnames_glm_pair[cluster_corr][vox_thr],
-                output_fname=os.path.join(output_fig, f"n{len(IDs)}_glm_axial_{cluster_corr}_vox{vox_thr}_avg_map.png"),
-                stat_min=3, stat_max=6, cbar_label='t-value',
-                background_fname=os.path.join(path_code, "template", config["PAM50_t2"]),
-                underlay_fname=os.path.join(path_code, "template", config["PAM50_gm"]),
-                z_slices=z_slices, n_slices=len(z_slices), redo=redo)
-
-            bar_plot[cluster_corr][vox_thr] = figures.bar_plot(
-                csv_pair=metrics_csv_pair[cluster_corr][vox_thr], figsize=(2, 2.7),
-                output_fname=os.path.join(output_fig, f"n{len(IDs)}_glm_cluster{cluster_corr}_vox{vox_thr}_nb_vox.png"), redo=redo)
-
-            csv_pair_dist = values_csv_pair[cluster_corr][vox_thr]
-            if len(csv_pair_dist) >= 2:
-                dist_plot[cluster_corr][vox_thr] = figures.plot_dist(
-                    csv_pair=[csv_pair_dist[1], csv_pair_dist[0]],
-                    maps_name=["shimSlice", "shimBase"],
-                    colors=["#ED263F", "#ADA8A8"], figsize=(2, 2.7),
-                    output_fname=os.path.join(output_fig, f"n{len(IDs)}_glm_cluster{cluster_corr}_vox{vox_thr}_distr.png"), redo=redo)
-
-            if cluster_corr in glm_plot and vox_thr in glm_plot.get(cluster_corr, {}):
-                figures.combine_plots(
-                    output_fname=os.path.join(output_fig, f"n{len(IDs)}_combined_task_cluster_{cluster_corr}_vox_{vox_thr}_plots.png"),
-                    map_files=[glm_plot[cluster_corr][vox_thr]],
-                    axial_files=[glm_axial_plot[cluster_corr][vox_thr]],
-                    graph_files=[bar_plot[cluster_corr][vox_thr], dist_plot.get(cluster_corr, {}).get(vox_thr)],
-                    label_idx=True, figsize=(5, 3.8), redo=True)
-except Exception as e:
-    print(f"WARNING: GLM group figure failed: {e}", flush=True)
+# Figure generation moved to figures_workflow.py (run with --figures).
 
 #------------------------------------------------------------------
 #------ compute test-retest reproductibility using ICC
@@ -384,22 +276,7 @@ if not IDs_2runs:
     print("WARNING: No subjects with 2 runs of shimSlice+3mm — ICC run-01 vs run-02 skipped.", flush=True)
 else:
     try:
-        icc_maps, icc_maps_s = glm_ana.run_icc(IDs=IDs_2runs, i_fnames=i_fnames_by_runs, o_dir=output_dir, mask_file=mask, threshold=0, redo=redo)
-        z_slices = [324, 306, 268, 238, 222, 204]
-        icc_plot = figures.plot_fmri_maps(i_fnames=[icc_maps],
-                                          output_fname=os.path.join(output_fig, f"n{len(IDs_2runs)}_icc_run-01_run-02.png"),
-                                          titles=[""], cmap="rainbow", cbar_label='ICC',
-                                          z_slices=z_slices, stat_min=0.3, stat_max=0.9,
-                                          background_fname=os.path.join(path_code, "template", config["PAM50_t2"]), redo=redo)
-        icc_axial_plot = figures.plot_fmri_maps_axial(i_fnames=[icc_maps],
-                                                      output_fname=os.path.join(output_fig, f"n{len(IDs_2runs)}_icc__run-01_run-02_axial.png"),
-                                                      cmap="rainbow", stat_min=0.3, stat_max=0.9, titles=[""],
-                                                      background_fname=os.path.join(path_code, "template", config["PAM50_t2"]),
-                                                      underlay_fname=os.path.join(path_code, "template", config["PAM50_gm"]),
-                                                      z_slices=z_slices, n_slices=len(z_slices), redo=redo)
-        figures.combine_plots(output_fname=os.path.join(output_fig, f"n{len(IDs_2runs)}_combined_icc_plots.png"),
-                              map_files=[icc_plot], label_idx=False, axial_files=[icc_axial_plot],
-                              figsize=(2, 4), redo=redo)
+        glm_ana.run_icc(IDs=IDs_2runs, i_fnames=i_fnames_by_runs, o_dir=output_dir, mask_file=mask, threshold=0, redo=redo)
     except Exception as e:
         print(f"WARNING: ICC run-01 vs run-02 failed: {e}", flush=True)
 

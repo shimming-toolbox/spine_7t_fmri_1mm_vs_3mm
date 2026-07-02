@@ -34,6 +34,7 @@ while [[ $# -gt 0 ]]; do
         --firstlevel) RUN_FIRSTLEVEL=true; shift;;
         --secondlevel) RUN_SECONDLEVEL=true; shift;;
         --compare) RUN_COMPARE=true; shift;;
+        --figures) RUN_FIGURES=true; shift;;
         --redo) REDO=true; shift;;
       *) echo "Unknown argument $1"; exit 1 ;;
     esac
@@ -46,7 +47,7 @@ if [ "${RUN_PREPROSS}" = false ] && \
    [ "${RUN_FIGURES}" = false ] && \
    [ "${RUN_COMPARE}" = false ]; then
     echo "ERROR: No processing step selected."
-    echo "Use --preprocess, --denoising, --firstlevel, --secondlevel and/or --compare"
+    echo "Use --preprocess, --denoising, --firstlevel, --secondlevel, --compare and/or --figures"
     exit 1
 fi
 
@@ -134,4 +135,12 @@ fi
 if [ "${RUN_COMPARE}" = true ]; then
     run_step "1mm vs 3mm comparison" "compare_${timestamp}.txt" \
         ${PYTHON} -u ../code/compare_workflow.py --path-data "${PATH_DATA}" --ids "${IDs[@]}" "${TASKS_ARG[@]}" --redo "${REDO}"
+fi
+
+# --------------------------
+# Run figures
+# --------------------------
+if [ "${RUN_FIGURES}" = true ]; then
+    run_step "Figures" "figures_${timestamp}.txt" \
+        ${PYTHON} -u ../code/figures_workflow.py --path-data "${PATH_DATA}" --ids "${IDs[@]}" --redo "${REDO}"
 fi
