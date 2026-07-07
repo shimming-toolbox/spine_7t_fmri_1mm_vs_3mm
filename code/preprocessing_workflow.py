@@ -431,7 +431,11 @@ for ID_nb, ID in enumerate(IDs):
 
             if len(raw_func) == 0:
                 print(f'No functional file found for {tag} in raw data, skipping this acquisition.', flush=True)
-                os.rmdir(o_dir)
+                if os.path.isdir(o_dir):
+                    try:
+                        os.rmdir(o_dir)
+                    except OSError:
+                        pass
                 continue
 
             for i_func, func_file in enumerate(raw_func):
