@@ -19,6 +19,7 @@ IDs=() # empty  → process all participants
 TASKS=() # empty → process all tasks
 RUN_PREPROSS=false
 RUN_DENOISING=false
+RUN_POSTPROCESS=false
 RUN_FIRSTLEVEL=false
 RUN_SECONDLEVEL=false
 RUN_FIGURES=false
@@ -33,6 +34,7 @@ while [[ $# -gt 0 ]]; do
         --tasks) shift; while [[ $# -gt 0 && "$1" != --* ]]; do TASKS+=("$1"); shift; done ;;
         --preprocess) RUN_PREPROSS=true; shift;;
         --denoising) RUN_DENOISING=true; shift;;
+        --postprocess) RUN_POSTPROCESS=true; shift;;
         --firstlevel) RUN_FIRSTLEVEL=true; shift;;
         --secondlevel) RUN_SECONDLEVEL=true; shift;;
         --figures) RUN_FIGURES=true; shift;;
@@ -43,11 +45,12 @@ done
 
 if [ "${RUN_PREPROSS}" = false ] && \
    [ "${RUN_DENOISING}" = false ] && \
+   [ "${RUN_POSTPROCESS}" = false ] && \
    [ "${RUN_FIRSTLEVEL}" = false ] && \
    [ "${RUN_SECONDLEVEL}" = false ] && \
    [ "${RUN_FIGURES}" = false ]; then
     echo "ERROR: No processing step selected."
-    echo "Use --preprocess, --denoising, --firstlevel, --secondlevel and/or --figures"
+    echo "Use --preprocess, --postprocess, --firstlevel, --secondlevel and/or --figures"
     exit 1
 fi
 
@@ -110,6 +113,15 @@ fi
 if [ "${RUN_DENOISING}" = true ]; then
     run_step "Denoising" "denoising_${timestamp}.txt" \
         ${PYTHON} -u ../code/denoising_workflow.py --path-data "${PATH_DATA}" --ids "${IDs[@]}" "${TASKS_ARG[@]}" --redo "${REDO}"
+fi
+
+# --------------------------
+# Run postprocessing (tSNR from REST data)
+# --------------------------
+
+if [ "${RUN_POSTPROCESS}" = true ]; then
+    run_step "Postprocessing (tSNR)" "postprocess_${timestamp}.txt" \
+        ${PYTHON} -u ../code/postprocess_workflow.py --path-data "${PATH_DATA}" --ids "${IDs[@]}" --redo "${REDO}"
 fi
 
 # --------------------------
