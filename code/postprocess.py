@@ -523,7 +523,11 @@ class TSNR_main:
                 for acq_name in self.config["design_exp"]["acq_names"]:
                     tag = "task-" + task + "_acq-" + acq_name
 
-                    selected_file, _ = get_fname_with_max_volumes(ID, task, acq_name, self.config, "moco")
+                    try:
+                        selected_file, _ = get_fname_with_max_volumes(ID, task, acq_name, self.config, "moco")
+                    except RuntimeError as e:
+                        print(f"WARNING: {e} — skipping.", flush=True)
+                        continue
                     if selected_file is None:
                         continue
 
@@ -764,7 +768,11 @@ def find_max_volume_common_to_all_runs(IDs, tasks, acq_names, config, mod_to_ret
     for ID in IDs:
         for task in tasks:
             for acq_name in acq_names:
-                selected_file, n_vols = get_fname_with_max_volumes(ID, task, acq_name, config, mod_to_return)
+                try:
+                    selected_file, n_vols = get_fname_with_max_volumes(ID, task, acq_name, config, mod_to_return)
+                except RuntimeError as e:
+                    print(f"WARNING: {e} — skipping sub-{ID} task-{task} acq-{acq_name} for volume count.", flush=True)
+                    continue
                 if selected_file is None:
                     continue
                 if n_vols < max_vols:

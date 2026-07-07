@@ -32,6 +32,7 @@ path_code = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(os.path.join(path_code, "code"))  # Change this line according to your directory
 from preprocess import Preprocess_main, Preprocess_Sc, copy_warping_fields_from_ref_tag, copy_segmentation_from_ref_tag
 from preprocess import copy_csf_segmentation_from_ref_tag
+import postprocess
 import utils
 
 with open(os.path.join(path_code, "config", "config_spine_7t_fmri.json")) as config_file:
@@ -557,4 +558,17 @@ df_ordered.to_csv(os.path.join(derivatives_dir, "processing", "acquisition_param
 
 # Print participant metrics
 print(f"Number of particiants that have rest scans: {df_ordered[df_ordered['task'] == 'rest']['ID'].nunique()}", flush=True)
+
+# ------------------------------------------------------------------
+# Compute tSNR maps (REST data only)
+# ------------------------------------------------------------------
+print("", flush=True)
+print("=== tSNR script Start ===", flush=True)
+config_tsnr = dict(config)
+config_tsnr["design_exp"] = dict(config["design_exp"])
+config_tsnr["design_exp"]["task_names"] = ["rest"]
+tsnr_ana = postprocess.TSNR_main(config_tsnr, IDs, redo)
+tsnr_ana.generate_tsnr_maps_and_csv()
+tsnr_ana.generate_tsnr_maps_derived()
+print("=== tSNR script Done ===", flush=True)
 
