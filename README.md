@@ -87,10 +87,10 @@ pip install -r "${PATH_CODE}/config/requirements.txt"
 
 ## Analysis Pipeline ⚙️
 
-The pipeline consists of five sequential steps run via a single shell script:
+The pipeline consists of four sequential steps run via a single shell script:
 
 ```
-preprocess  →  postprocess  →  firstlevel  →  secondlevel  →  figures
+preprocess  →  firstlevel  →  secondlevel  →  figures
 ```
 
 ### Run the full pipeline
@@ -99,7 +99,7 @@ preprocess  →  postprocess  →  firstlevel  →  secondlevel  →  figures
 bash "${PATH_CODE}/code/run_all_processing.sh" \
   --path-data "${PATH_DATA}" \
   --path-code "${PATH_CODE}" \
-  --preprocess --postprocess --firstlevel --secondlevel --figures
+  --preprocess --firstlevel --secondlevel --figures
 ```
 
 > [!NOTE]
@@ -111,7 +111,7 @@ bash "${PATH_CODE}/code/run_all_processing.sh" \
   --path-data "${PATH_DATA}" \
   --path-code "${PATH_CODE}" \
   --ids 099 100 101 \
-  --preprocess --postprocess --firstlevel --secondlevel --figures
+  --preprocess --firstlevel --secondlevel --figures
 ```
 
 Use `--redo` to force rerunning all steps even if outputs already exist. By default, existing outputs are reused.
@@ -129,6 +129,7 @@ Runs `preprocessing_workflow.py`. For each subject and acquisition:
 2. Spinal cord segmentation and centerline detection (with optional manual correction)
 3. Motion correction (`sct_fmri_moco`)
 4. Registration of the mean functional image to the PAM50 template
+5. Compute tSNR maps from the motion-corrected **rest** data
 
 ```bash
 bash "${PATH_CODE}/code/run_all_processing.sh" \
@@ -149,21 +150,7 @@ After running preprocessing, visually check outputs and apply corrections if nee
 
 ---
 
-### Step 2 — Postprocessing (`--postprocess`)
-
-Runs `postprocess_workflow.py`. For each subject and acquisition:
-
-1. Compute tSNR maps from the motion-corrected **rest** data
-
-```bash
-bash "${PATH_CODE}/code/run_all_processing.sh" \
-  --path-data "${PATH_DATA}" --path-code "${PATH_CODE}" \
-  --postprocess
-```
-
----
-
-### Step 3 — First-level analysis (`--firstlevel`)
+### Step 2 — First-level analysis (`--firstlevel`)
 
 Runs `firstlevel_workflow.py`. For each subject and acquisition:
 
@@ -179,7 +166,7 @@ bash "${PATH_CODE}/code/run_all_processing.sh" \
 
 ---
 
-### Step 4 — Second-level analysis (`--secondlevel`)
+### Step 3 — Second-level analysis (`--secondlevel`)
 
 Runs `secondlevel_workflow.py`. Across subjects:
 
@@ -197,7 +184,7 @@ bash "${PATH_CODE}/code/run_all_processing.sh" \
 
 ---
 
-### Step 5 — Figure generation (`--figures`)
+### Step 4 — Figure generation (`--figures`)
 
 Runs `figures_workflow.py`. Generates all figures from the processed data.
 
