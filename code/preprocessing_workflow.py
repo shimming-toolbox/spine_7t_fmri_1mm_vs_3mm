@@ -26,6 +26,7 @@
 # Imports
 import sys, json, glob, os, re, shutil, argparse
 import pandas as pd
+import postprocess
 
 # get path of the parent location of this file, and go up one level
 path_code = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -557,4 +558,17 @@ df_ordered.to_csv(os.path.join(derivatives_dir, "processing", "acquisition_param
 
 # Print participant metrics
 print(f"Number of particiants that have rest scans: {df_ordered[df_ordered['task'] == 'rest']['ID'].nunique()}", flush=True)
+
+#------------------------------------------------------------------
+#------ Compute tSNR from REST data
+#------------------------------------------------------------------
+# tSNR = mean/std over time. REST data gives an unconfounded noise estimate;
+# motor-task data would inflate tSNR with genuine BOLD activation.
+print("", flush=True)
+print("=== tSNR computation (rest) Start ===", flush=True)
+config["design_exp"]["task_names"] = ["rest"]
+tsnr_ana = postprocess.TSNR_main(config, IDs, redo)
+tsnr_ana.generate_tsnr_maps_and_csv()
+tsnr_ana.generate_tsnr_maps_derived()
+print("=== tSNR computation Done ===", flush=True)
 
