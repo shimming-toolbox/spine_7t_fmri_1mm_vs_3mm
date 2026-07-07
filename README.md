@@ -90,7 +90,7 @@ pip install -r "${PATH_CODE}/config/requirements.txt"
 The pipeline consists of four sequential steps run via a single shell script:
 
 ```
-preprocess  →  firstlevel  →  secondlevel  →  compare
+preprocess  →  firstlevel  →  secondlevel  →  figures
 ```
 
 ### Run the full pipeline
@@ -99,11 +99,11 @@ preprocess  →  firstlevel  →  secondlevel  →  compare
 bash "${PATH_CODE}/code/run_all_processing.sh" \
   --path-data "${PATH_DATA}" \
   --path-code "${PATH_CODE}" \
-  --preprocess --firstlevel --secondlevel --compare
+  --preprocess --firstlevel --secondlevel --figures
 ```
 
 > [!NOTE]
-> Do not restrict to `--tasks motor` here. Some acquisitions (shimBase+3mm, shimBase+1mm+sms2) were collected during the **rest** task and are needed for tSNR and image-quality comparisons.
+> Do not restrict to `--tasks motor` here. Some acquisitions (shimBase+3mm, shimBase+1mm+sms2) were collected during the **rest** task and are needed for tSNR comparisons.
 
 To process a subset of subjects, add `--ids`:
 ```bash
@@ -111,7 +111,7 @@ bash "${PATH_CODE}/code/run_all_processing.sh" \
   --path-data "${PATH_DATA}" \
   --path-code "${PATH_CODE}" \
   --ids 099 100 101 \
-  --preprocess --firstlevel --secondlevel --compare
+  --preprocess --firstlevel --secondlevel --figures
 ```
 
 Use `--redo` to force rerunning all steps even if outputs already exist. By default, existing outputs are reused.
@@ -129,6 +129,7 @@ Runs `preprocessing_workflow.py`. For each subject and acquisition:
 2. Spinal cord segmentation and centerline detection (with optional manual correction)
 3. Motion correction (`sct_fmri_moco`)
 4. Registration of the mean functional image to the PAM50 template
+5. Compute tSNR maps from the motion-corrected **rest** data
 
 ```bash
 bash "${PATH_CODE}/code/run_all_processing.sh" \
@@ -153,10 +154,9 @@ After running preprocessing, visually check outputs and apply corrections if nee
 
 Runs `firstlevel_workflow.py`. For each subject and acquisition:
 
-1. Compute tSNR maps from the motion-corrected data
-2. Run a GLM to estimate activation maps (motor task vs rest), using the events files and motion-corrected functional data
-3. Threshold and normalize stat maps to PAM50 template space
-4. Generate the EPI comparison figure across shimming conditions
+1. Run a GLM to estimate activation maps (motor task vs rest), using the events files and motion-corrected functional data
+2. Threshold and normalize stat maps to PAM50 template space
+3. Generate the EPI comparison figure across shimming conditions
 
 ```bash
 bash "${PATH_CODE}/code/run_all_processing.sh" \
@@ -184,23 +184,12 @@ bash "${PATH_CODE}/code/run_all_processing.sh" \
 
 ---
 
-### Step 4 — 1mm vs 3mm comparison (`--compare`)
+### Step 4 — Figure generation (`--figures`)
 
-Runs `compare_workflow.py`. Quantitative comparison of 1mm vs 3mm acquisitions across shimming conditions, producing figures and statistics for:
-
-1. **tSNR** — mean tSNR within the spinal cord mask per subject/condition, with paired Wilcoxon tests
-2. **BOLD sensitivity** — peak z-score and number of suprathreshold voxels from the GLM
-3. **Image quality (MI)** — mutual information between EPI and T2*w GRE anatomy in PAM50 space, comparing shimBase vs shimSlice at both resolutions
+Runs `figures_workflow.py`. Generates all figures from the processed data.
 
 ```bash
 bash "${PATH_CODE}/code/run_all_processing.sh" \
   --path-data "${PATH_DATA}" --path-code "${PATH_CODE}" \
-  --tasks motor --compare
+  --figures
 ```
-
----
-
-### Figure generation 🖼️
-
-> [!NOTE]
-> A dedicated `figures_workflow.py` script is planned (see [issue #21](https://github.com/shimming-toolbox/spine_7t_fmri_1mm_vs_3mm/issues/21)). Currently, figures are generated automatically at the end of the first-level, second-level, and compare workflows.
