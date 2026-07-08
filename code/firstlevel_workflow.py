@@ -75,20 +75,6 @@ os.makedirs(main_fig_dir, exist_ok=True)
 #------------------------------------------------------------------
 #------ I. Compute tSNR
 #------------------------------------------------------------------
-print("=== tSNR script Start ===", flush=True)
-print("Participant(s) included : ", IDs, flush=True)
-print("===================================", flush=True)
-print("")
-
-# Compute individual level
-tsnr_ana=postprocess.TSNR_main(config, IDs,redo)
-tsnr_ana.generate_tsnr_maps_and_csv()
-tsnr_ana.generate_tsnr_maps_derived()
-
-print("=== tSNR script Done ===", flush=True)
-print("===================================", flush=True)
-print("")
-
 #------------------------------------------------------------------
 #------ II. Plot EPI comparison (moved to figures_workflow.py)
 #------------------------------------------------------------------
