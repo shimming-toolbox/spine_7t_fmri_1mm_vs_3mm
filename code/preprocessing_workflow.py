@@ -25,6 +25,8 @@
 #------------------------------------------------------------------
 # Imports
 import sys, json, glob, os, re, shutil, argparse
+import numpy as np
+import nibabel as nib
 import pandas as pd
 
 # get path of the parent location of this file, and go up one level
@@ -174,6 +176,20 @@ def epi_full_processing(ID, func_file, tag, manual_centerline, warpT2w_PAM50_fil
     copy_warping_fields_from_ref_tag(ID, tag, tag, preprocessing_dir)
 
 
+def _get_seg_file(ID, source_tag, is_csf=False):
+    """Return path to SC (or CSF) segmentation for source_tag, preferring manual over auto."""
+    if is_csf:
+        manual_files = glob.glob(os.path.join(manual_dir, f"sub-{ID}", "func", f"sub-{ID}_{source_tag}_*bold_moco_mean_CSF_seg.nii.gz"))
+        auto_files = glob.glob(os.path.join(preprocessing_dir.format(ID), "func", source_tag, "sct_propseg", f"sub-{ID}_{source_tag}_*bold_moco_mean_CSF_seg.nii.gz"))
+    else:
+        manual_files = glob.glob(os.path.join(manual_dir, f"sub-{ID}", "func", f"sub-{ID}_{source_tag}_*bold_moco_mean_seg.nii.gz"))
+        auto_files = glob.glob(os.path.join(preprocessing_dir.format(ID), "func", source_tag, "sct_deepseg", f"sub-{ID}_{source_tag}_*bold_moco_mean_seg.nii.gz"))
+    files = manual_files or auto_files
+    if not files:
+        raise RuntimeError(f"No {'CSF ' if is_csf else ''}segmentation found for {source_tag} sub-{ID}")
+    return sorted(files)[0]
+
+
 def epi_avg_slices_moco(ID, source_tag, tag, n_slices_avg, redo, verbose):
     # ------------------------------------------------------------------
     # ------ Average n_slices_avg adjacent slices of the motion-corrected data
@@ -211,40 +227,23 @@ def epi_avg_slices_moco(ID, source_tag, tag, n_slices_avg, redo, verbose):
 def epi_avg_slices_processing(ID, source_tag, tag, n_slices_avg, warpT2w_PAM50_files, redo, verbose):
     for moco_f, moco_mean_f, run_name in epi_avg_slices_moco(ID, source_tag, tag, n_slices_avg, redo, verbose):
         # ------------------------------------------------------------------
-        # ------ Create mask around the cord for QC of the segmentation
+        # ------ Derive SC and CSF segmentations from source by slice-averaging
         # ------------------------------------------------------------------
-        ctrl_sc_file, mask_sc_file = preprocess_Sc.moco_mask(ID=ID,
-                                                             i_img=moco_mean_f,
-                                                             mask_size_mm=35,
-                                                             task_name=tag,
-                                                             manual=manual_centerline,
-                                                             redo_ctrl=redo,
-                                                             redo_mask=redo,
-                                                             verbose=verbose)
+        seg_func_sc_file = os.path.join(preprocessing_dir.format(ID), "func", tag,
+                                        f"sub-{ID}_{tag}_bold_moco_mean_seg.nii.gz")
+        csf_func_file = os.path.join(preprocessing_dir.format(ID), "func", tag,
+                                     f"sub-{ID}_{tag}_bold_moco_mean_CSF_seg.nii.gz")
+        for dest, is_csf in [(seg_func_sc_file, False), (csf_func_file, True)]:
+            if not os.path.exists(dest) or redo:
+                src = _get_seg_file(ID, source_tag, is_csf=is_csf)
+                tmp = dest.replace(".nii.gz", "_tmp.nii.gz")
+                utils.average_slices_img(i_img=src, o_img=tmp, n_slices_avg=n_slices_avg, redo=True)
+                nii = nib.load(tmp)
+                binary = (nii.get_fdata() >= 0.5).astype(np.uint8)
+                nib.save(nib.Nifti1Image(binary, nii.affine, nii.header), dest)
+                os.remove(tmp)
 
-        # ------------------------------------------------------------------
-        # ------ Run func cord and CSF segmentation
-        # ------------------------------------------------------------------
-        # Cord segmentation
-        seg_func_sc_file = preprocess_Sc.segmentation(ID=ID,
-                                                      i_img=moco_mean_f,
-                                                      task_name=tag,
-                                                      img_type="func",
-                                                      mask_qc=mask_sc_file,
-                                                      redo=redo,
-                                                      redo_qc=redo,  # should be true if you have done manual correction
-                                                      verbose=verbose)
-        # csf segmentation
-        preprocess_Sc.segmentation(ID=ID,
-                                   i_img=moco_mean_f,
-                                   task_name=tag, contrast_anat="t2s",
-                                   img_type="func",
-                                   tissue="csf",
-                                   redo_qc=redo,  # should be true if you have done manual correction
-                                   redo=redo,
-                                   verbose=verbose)
-
-        print(f'=== Func segmentation : Done  {ID} {tag} {run_name} ===', flush=True)
+        print(f'=== Derived seg (avg{n_slices_avg}x from {source_tag}): Done {ID} {tag} {run_name} ===', flush=True)
 
         # ------------------------------------------------------------------
         # ------ Registration in PAM50
@@ -261,9 +260,6 @@ def epi_avg_slices_processing(ID, source_tag, tag, n_slices_avg, warpT2w_PAM50_f
                                        redo=redo,
                                        verbose=verbose)
 
-        # Copy the segmentation, csf segmentation and warping field to where the final files are expected to be
-        copy_segmentation_from_ref_tag(ID, tag, tag, manual_dir, preprocessing_dir)
-        copy_csf_segmentation_from_ref_tag(ID, tag, tag, manual_dir, preprocessing_dir)
         copy_warping_fields_from_ref_tag(ID, tag, tag, preprocessing_dir)
 
 
@@ -303,33 +299,18 @@ def epi_smooth_slices_moco(ID, source_tag, tag, smooth_width, redo, verbose):
 
 def epi_smooth_slices_processing(ID, source_tag, tag, smooth_width, warpT2w_PAM50_files, redo, verbose):
     for moco_f, moco_mean_f, run_name in epi_smooth_slices_moco(ID, source_tag, tag, smooth_width, redo, verbose):
-        ctrl_sc_file, mask_sc_file = preprocess_Sc.moco_mask(ID=ID,
-                                                             i_img=moco_mean_f,
-                                                             mask_size_mm=35,
-                                                             task_name=tag,
-                                                             manual=manual_centerline,
-                                                             redo_ctrl=redo,
-                                                             redo_mask=redo,
-                                                             verbose=verbose)
+        # ------------------------------------------------------------------
+        # ------ Copy SC and CSF segmentations from source (same geometry)
+        # ------------------------------------------------------------------
+        seg_func_sc_file = os.path.join(preprocessing_dir.format(ID), "func", tag,
+                                        f"sub-{ID}_{tag}_bold_moco_mean_seg.nii.gz")
+        csf_func_file = os.path.join(preprocessing_dir.format(ID), "func", tag,
+                                     f"sub-{ID}_{tag}_bold_moco_mean_CSF_seg.nii.gz")
+        for dest, is_csf in [(seg_func_sc_file, False), (csf_func_file, True)]:
+            if not os.path.exists(dest) or redo:
+                shutil.copy(_get_seg_file(ID, source_tag, is_csf=is_csf), dest)
 
-        seg_func_sc_file = preprocess_Sc.segmentation(ID=ID,
-                                                      i_img=moco_mean_f,
-                                                      task_name=tag,
-                                                      img_type="func",
-                                                      mask_qc=mask_sc_file,
-                                                      redo=redo,
-                                                      redo_qc=redo,
-                                                      verbose=verbose)
-        preprocess_Sc.segmentation(ID=ID,
-                                   i_img=moco_mean_f,
-                                   task_name=tag, contrast_anat="t2s",
-                                   img_type="func",
-                                   tissue="csf",
-                                   redo_qc=redo,
-                                   redo=redo,
-                                   verbose=verbose)
-
-        print(f'=== Func segmentation : Done  {ID} {tag} {run_name} ===', flush=True)
+        print(f'=== Derived seg (copy from {source_tag}): Done {ID} {tag} {run_name} ===', flush=True)
 
         param = "step=1,type=seg,algo=centermass:step=2,type=seg,algo=bsplinesyn,metric=CC,iter=10,smooth=1,slicewise=1"
         preprocess_Sc.coreg_img2PAM50(ID=ID,
@@ -343,8 +324,6 @@ def epi_smooth_slices_processing(ID, source_tag, tag, smooth_width, warpT2w_PAM5
                                        redo=redo,
                                        verbose=verbose)
 
-        copy_segmentation_from_ref_tag(ID, tag, tag, manual_dir, preprocessing_dir)
-        copy_csf_segmentation_from_ref_tag(ID, tag, tag, manual_dir, preprocessing_dir)
         copy_warping_fields_from_ref_tag(ID, tag, tag, preprocessing_dir)
 
 #------------------------------------------------------------------
