@@ -308,11 +308,8 @@ def epi_avg_slices_moco(ID, source_tag, tag, n_slices_avg, redo, verbose):
     return outputs
 
 
-def epi_avg_slices_processing(ID, source_tag, tag, n_slices_avg, warpT2w_PAM50_files, redo, verbose):
+def epi_avg_slices_processing(ID, source_tag, tag, n_slices_avg, redo, verbose):
     for moco_f, moco_mean_f, run_name in epi_avg_slices_moco(ID, source_tag, tag, n_slices_avg, redo, verbose):
-        # ------------------------------------------------------------------
-        # ------ Derive SC and CSF segmentations from source by slice-averaging
-        # ------------------------------------------------------------------
         seg_func_sc_file = os.path.join(preprocessing_dir.format(ID), "func", tag,
                                         f"sub-{ID}_{tag}_bold_moco_mean_seg.nii.gz")
         csf_func_file = os.path.join(preprocessing_dir.format(ID), "func", tag,
@@ -328,23 +325,6 @@ def epi_avg_slices_processing(ID, source_tag, tag, n_slices_avg, warpT2w_PAM50_f
                 os.remove(tmp)
 
         print(f'=== Derived seg (avg{n_slices_avg}x from {source_tag}): Done {ID} {tag} {run_name} ===', flush=True)
-
-        # ------------------------------------------------------------------
-        # ------ Registration in PAM50
-        # ------------------------------------------------------------------
-        param = "step=1,type=seg,algo=centermass:step=2,type=seg,algo=bsplinesyn,metric=CC,iter=10,smooth=1,slicewise=1"
-        preprocess_Sc.coreg_img2PAM50(ID=ID,
-                                       i_img=moco_mean_f,
-                                       i_seg=seg_func_sc_file,
-                                       task_name=tag,
-                                       run_name=run_name,
-                                       initwarp=warpT2w_PAM50_files[0],
-                                       initwarpinv=warpT2w_PAM50_files[1],
-                                       param=param,
-                                       redo=redo,
-                                       verbose=verbose)
-
-        copy_warping_fields_from_ref_tag(ID, tag, tag, preprocessing_dir)
 
 
 def epi_smooth_slices_moco(ID, source_tag, tag, smooth_width, redo, verbose):
@@ -383,9 +363,6 @@ def epi_smooth_slices_moco(ID, source_tag, tag, smooth_width, redo, verbose):
 
 def epi_smooth_slices_processing(ID, source_tag, tag, smooth_width, warpT2w_PAM50_files, redo, verbose):
     for moco_f, moco_mean_f, run_name in epi_smooth_slices_moco(ID, source_tag, tag, smooth_width, redo, verbose):
-        # ------------------------------------------------------------------
-        # ------ Copy SC and CSF segmentations from source (same geometry)
-        # ------------------------------------------------------------------
         seg_func_sc_file = os.path.join(preprocessing_dir.format(ID), "func", tag,
                                         f"sub-{ID}_{tag}_bold_moco_mean_seg.nii.gz")
         csf_func_file = os.path.join(preprocessing_dir.format(ID), "func", tag,
@@ -593,7 +570,7 @@ for ID_nb, ID in enumerate(IDs):
             os.makedirs(os.path.join(preprocessing_dir.format(ID), "func", tag), exist_ok=True)
 
             if n_slices_avg is not None:
-                epi_avg_slices_processing(ID, source_tag, tag, n_slices_avg, warpT2w_PAM50_files, redo, verbose)
+                epi_avg_slices_processing(ID, source_tag, tag, n_slices_avg, redo, verbose)
             else:
                 epi_smooth_slices_processing(ID, source_tag, tag, smooth_width, warpT2w_PAM50_files, redo, verbose)
 
