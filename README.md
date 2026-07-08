@@ -140,11 +140,16 @@ bash "${PATH_CODE}/code/run_all_processing.sh" \
 <details>
 <summary>Manual corrections</summary>
 
-After running preprocessing, visually check outputs and apply corrections if needed before re-running.
+After running preprocessing, visually check QC outputs in the order below and apply corrections if needed before re-running. Each step depends on outputs from the previous one.
 
-- **Motion correction mask** — check centerline in `derivatives/manual/sub-<ID>/func/<tag>/`; correct `*_bold_tmean_centerline.nii.gz` if needed
-- **Spinal cord segmentation** — check `*_bold_moco_mean_seg.nii.gz`; save corrected file under the same name in `derivatives/manual/sub-<ID>/func/<tag>/`
-- **Vertebral labeling** — check `*_T2star_space-orig_label-ivd.nii.gz` in `derivatives/manual/sub-<ID>/anat/`
+1. **Anat segmentation** — check spinal cord mask on T2star; save corrected `*_T2star_seg.nii.gz` under `derivatives/manual/sub-<ID>/anat/`
+2. **Anat vertebral labeling** — check disc labels; save corrected `*_T2star_space-orig_label-ivd.nii.gz` under `derivatives/manual/sub-<ID>/anat/`
+3. **Anat registration to PAM50** — check T2star-to-template alignment in QC report (`sct_register_to_template`)
+4. **EPI centerline** — check moco mask center of mass on mean EPI; save corrected `*_bold_tmean_centerline.nii.gz` under `derivatives/manual/sub-<ID>/func/<tag>/`
+5. **EPI motion correction** — check moco displacement parameters and verify no excessive inter-volume motion
+6. **EPI segmentation (REST only)** — check spinal cord mask on REST mean-moco; save corrected `*_bold_moco_mean_seg.nii.gz` under `derivatives/manual/sub-<ID>/func/<tag>/`
+7. **REST→MOTOR registration** — check that the REST segmentation warped into MOTOR space aligns with the MOTOR mean-moco (output in `sct_register_rest2motor/`)
+8. **EPI registration to PAM50** — check functional-to-template alignment in QC report (`sct_register_multimodal`)
 
 </details>
 
