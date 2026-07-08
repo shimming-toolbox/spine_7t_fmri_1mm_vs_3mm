@@ -220,9 +220,12 @@ def epi_derive_seg_from_rest(ID, rest_tag, func_file, tag, warpT2w_PAM50_files, 
         cmd_reg = (f"sct_register_multimodal -i {rest_moco_mean} -d {moco_mean_f}"
                    f" -param step=1,type=im,algo=affine,metric=CC -ofolder {reg_dir} -v 0")
         os.system(cmd_reg)
-        src_warp = os.path.join(reg_dir, "warp_src2dest.nii.gz")
-        if os.path.exists(src_warp):
-            os.rename(src_warp, warp_rest2motor)
+        # sct_register_multimodal names the warp after src/dest basenames, not warp_src2dest.nii.gz
+        src_stem = os.path.basename(rest_moco_mean).replace(".nii.gz", "")
+        warp_candidates = glob.glob(os.path.join(reg_dir, f"warp_{src_stem}2*.nii.gz"))
+        if not warp_candidates:
+            raise RuntimeError(f"REST->MOTOR registration warp not found in {reg_dir}")
+        os.rename(warp_candidates[0], warp_rest2motor)
 
     # Apply warp to REST SC and CSF segmentations -> MOTOR space
     motor_sc_seg  = os.path.join(o_dir, f"sub-{ID}_{tag}_bold_moco_mean_seg.nii.gz")
