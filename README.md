@@ -140,16 +140,20 @@ bash "${PATH_CODE}/code/run_all_processing.sh" \
 <details>
 <summary>Manual corrections</summary>
 
-After running preprocessing, visually check QC outputs in the order below and apply corrections if needed before re-running. Each step depends on outputs from the previous one.
+After running preprocessing, open the QC report (`derivatives/processing/qc/index.html`) and go through the checks below in order. For each one, use the search box and/or the **Function** / **Contrast** filter buttons in the QC viewer to narrow the entries.
 
-1. **Anat segmentation** — check spinal cord mask on T2star; save corrected `*_T2star_seg.nii.gz` under `derivatives/manual/sub-<ID>/anat/`
-2. **Anat vertebral labeling** — check disc labels; save corrected `*_T2star_space-orig_label-ivd.nii.gz` under `derivatives/manual/sub-<ID>/anat/`
-3. **Anat registration to PAM50** — check T2star-to-template alignment in QC report (`sct_register_to_template`)
-4. **EPI centerline** — check moco mask center of mass on mean EPI; save corrected `*_bold_tmean_centerline.nii.gz` under `derivatives/manual/sub-<ID>/func/<tag>/`
-5. **EPI motion correction** — check moco displacement parameters and verify no excessive inter-volume motion
-6. **EPI segmentation (REST only)** — check spinal cord mask on REST mean-moco; save corrected `*_bold_moco_mean_seg.nii.gz` under `derivatives/manual/sub-<ID>/func/<tag>/`
-7. **REST→MOTOR registration** — check that the REST segmentation warped into MOTOR space aligns with the MOTOR mean-moco (output in `sct_register_rest2motor/`)
-8. **EPI registration to PAM50** — check functional-to-template alignment in QC report (`sct_register_multimodal`)
+| # | What to inspect | How to find it in QC | Correction file (save under `derivatives/manual/`) |
+|---|---|---|---|
+| 1 | T2\*w anat cord segmentation | search `T2star_seg`, filter function `sct_deepseg` | `sub-<ID>/anat/<filename>_seg.nii.gz` |
+| 2 | Vertebral disc labels (totalspineseg) | search `totalspineseg`, filter function `sct_deepseg` — inspect only the **pointwise labels** entry (see [#45](https://github.com/shimming-toolbox/spine_7t_fmri_1mm_vs_3mm/issues/45)) | `sub-<ID>/anat/<filename>_label-ivd_mask.nii.gz` |
+| 3 | Anat-to-template registration | search `register_to_template`, filter contrast to **Anat** only | re-run with corrected seg/labels from steps 1–2 |
+| 4 | Moco centerline (motion-correction mask) | search `_bold_tmean_centerline` | `sub-<ID>/func/<filename>_tmean_centerline.nii.gz` |
+| 5 | Motion correction (`sct_fmri_moco`) | filter function **sct_fmri_moco**, scroll through all entries | re-run moco with corrected centerline from step 4 |
+| 6 | Functional cord segmentation (**REST only** — MOTOR seg is derived from this) | search `_bold_moco_mean_seg`, filter function `sct_deepseg` | `sub-<ID>/func/<filename>_bold_moco_mean_seg.nii.gz` |
+| 7 | Rest-to-motor registration | search `sct_register_rest2motor` | re-run with corrected seg from step 6 |
+| 8 | EPI-to-template registration | search `PAM50_t2_reg` | re-run with corrected seg from step 6 |
+
+After saving any corrected file, re-run preprocessing with `--redo` so that downstream steps pick up the correction.
 
 </details>
 
