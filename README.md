@@ -140,11 +140,20 @@ bash "${PATH_CODE}/code/run_all_processing.sh" \
 <details>
 <summary>Manual corrections</summary>
 
-After running preprocessing, visually check outputs and apply corrections if needed before re-running.
+After running preprocessing, open the QC report (`derivatives/processing/qc/index.html`) and go through the checks below in order. For each one, use the search box and/or the **Function** / **Contrast** filter buttons in the QC viewer to narrow the entries.
 
-- **Motion correction mask** — check centerline in `derivatives/manual/sub-<ID>/func/<tag>/`; correct `*_bold_tmean_centerline.nii.gz` if needed
-- **Spinal cord segmentation** — check `*_bold_moco_mean_seg.nii.gz`; save corrected file under the same name in `derivatives/manual/sub-<ID>/func/<tag>/`
-- **Vertebral labeling** — check `*_T2star_space-orig_label-ivd.nii.gz` in `derivatives/manual/sub-<ID>/anat/`
+| # | What to inspect | How to find it in QC | Correction file (save under `derivatives/manual/`) |
+|---|---|---|---|
+| 1 | T2\*w anat cord segmentation | search `T2star_seg`, filter function `sct_deepseg` | `sub-<ID>/anat/<filename>_seg.nii.gz` |
+| 2 | Vertebral disc labels (totalspineseg) | search `totalspineseg`, filter function `sct_deepseg` — inspect only the **pointwise labels** entry (see [#45](https://github.com/shimming-toolbox/spine_7t_fmri_1mm_vs_3mm/issues/45)) | `sub-<ID>/anat/<filename>_label-ivd_mask.nii.gz` |
+| 3 | Anat-to-template registration | search `register_to_template`, filter contrast to **Anat** only | re-run with corrected seg/labels from steps 1–2 |
+| 4 | Moco centerline (motion-correction mask) | search `_bold_tmean_centerline` | `sub-<ID>/func/<filename>_tmean_centerline.nii.gz` |
+| 5 | Motion correction (`sct_fmri_moco`) | filter function **sct_fmri_moco**, scroll through all entries | re-run moco with corrected centerline from step 4 |
+| 6 | Functional cord segmentation | search `_bold_moco_mean_seg`, filter function `sct_deepseg` | `sub-<ID>/func/<filename>_bold_moco_mean_seg.nii.gz` |
+| 7 | Rest-to-motor registration | search `sct_register_rest2motor` | re-run with corrected seg from step 6 |
+| 8 | EPI-to-template registration | search `PAM50_t2_reg` | re-run with corrected seg from step 6 |
+
+After saving any corrected file, re-run preprocessing with `--redo` so that downstream steps pick up the correction.
 
 </details>
 
