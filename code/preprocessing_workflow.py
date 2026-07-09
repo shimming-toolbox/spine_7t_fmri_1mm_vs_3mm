@@ -176,7 +176,7 @@ def epi_full_processing(ID, func_file, tag, manual_centerline, warpT2w_PAM50_fil
     copy_warping_fields_from_ref_tag(ID, tag, tag, preprocessing_dir)
 
 
-def epi_derive_seg_from_rest(ID, rest_tag, func_file, tag, params_moco, o_dir, redo, verbose):
+def epi_derive_seg_from_rest(ID, rest_tag, func_file, tag, params_moco, o_dir, warpT2w_PAM50_files, redo, verbose):
     """Moco MOTOR, register REST mean-moco -> MOTOR mean-moco, warp REST seg to MOTOR space."""
     # Moco for MOTOR using its own mean as reference
     o_img = os.path.join(o_dir, os.path.basename(func_file).split(".")[0] + "_tmean.nii.gz")
@@ -243,51 +243,19 @@ def epi_derive_seg_from_rest(ID, rest_tag, func_file, tag, params_moco, o_dir, r
             os.system(cmd_apply)
     print(f'=== Derived seg from REST: Done  {ID} {tag} {run_name} ===', flush=True)
 
-    # Compose MOTOR->PAM50 warp by concatenating MOTOR->REST and REST->PAM50.
-    # This avoids a second PAM50 registration; the REST PAM50 registration is reused.
-    rest_to_pam50 = os.path.join(preprocessing_dir.format(ID), "func", rest_tag,
-                                  f"sub-{ID}_{rest_tag}_from-func_to_PAM50_mode-image_xfm.nii.gz")
-    pam50_to_rest = os.path.join(preprocessing_dir.format(ID), "func", rest_tag,
-                                  f"sub-{ID}_{rest_tag}_from-PAM50_to_func_mode-image_xfm.nii.gz")
-    pam50_t2 = os.path.join(preprocess_Sc.code_dir, "template", preprocess_Sc.config["PAM50_t2"])
-
-    run_tag_str = f"_{run_name}" if run_name else ""
-    func2pam50_dir = os.path.join(o_dir, "sct_register_multimodal")
-    os.makedirs(func2pam50_dir, exist_ok=True)
-    motor_to_pam50 = os.path.join(func2pam50_dir,
-                                   f"sub-{ID}_{tag}{run_tag_str}_from-func_to_PAM50_mode-image_xfm.nii.gz")
-    pam50_to_motor = os.path.join(func2pam50_dir,
-                                   f"sub-{ID}_{tag}{run_tag_str}_from-PAM50_to_func_mode-image_xfm.nii.gz")
-
-    # isct_ComposeMultiTransform applies transforms right-to-left (last arg is applied first).
-    # motor_to_pam50 (pull: PAM50 coords -> MOTOR coords):
-    #   apply rest_to_pam50 first (PAM50->REST), then warp_motor2rest (REST->MOTOR)
-    if not os.path.exists(motor_to_pam50) or redo:
-        cmd = (f"isct_ComposeMultiTransform 3 {motor_to_pam50} -R {pam50_t2}"
-               f" {warp_motor2rest} {rest_to_pam50}")
-        os.system(cmd)
-
-    # pam50_to_motor (pull: MOTOR coords -> PAM50 coords):
-    #   apply warp_rest2motor first (MOTOR->REST), then pam50_to_rest (REST->PAM50)
-    if not os.path.exists(pam50_to_motor) or redo:
-        cmd = (f"isct_ComposeMultiTransform 3 {pam50_to_motor} -R {moco_mean_f}"
-               f" {pam50_to_rest} {warp_rest2motor}")
-        os.system(cmd)
-
-    print(f'=== Composed MOTOR->PAM50 warp: Done  {ID} {tag} {run_name} ===', flush=True)
+    # Register MOTOR to PAM50 using the T2w anatomical warp as initwarp (same approach as REST
+    # and smooth3mm). This is more reliable than composing the REST PAM50 warp with REST->MOTOR.
+    preprocess_Sc.coreg_img2PAM50(ID=ID,
+                                   i_img=moco_mean_f,
+                                   i_seg=motor_sc_seg,
+                                   task_name=tag,
+                                   run_name=run_name,
+                                   initwarp=warpT2w_PAM50_files[0],
+                                   initwarpinv=warpT2w_PAM50_files[1],
+                                   redo=redo,
+                                   verbose=verbose)
     copy_warping_fields_from_ref_tag(ID, tag, tag, preprocessing_dir)
-
-    # Warp PAM50 T2 to MOTOR space and generate QC (mirrors coreg_img2PAM50 QC output)
-    pam50_cord = os.path.join(preprocess_Sc.code_dir, "template", preprocess_Sc.config["PAM50_cord"])
-    pam50_t2_reg = os.path.join(func2pam50_dir, f"PAM50_t2_reg{run_tag_str}.nii.gz")
-    if not os.path.exists(pam50_t2_reg) or redo:
-        cmd = (f"sct_apply_transfo -i {pam50_t2} -d {moco_mean_f}"
-               f" -w {pam50_to_motor} -o {pam50_t2_reg} -x spline -v 0")
-        os.system(cmd)
-    cmd_qc = (f"sct_qc -i {moco_mean_f} -s {motor_sc_seg} -p sct_register_multimodal"
-              f" -d {pam50_t2_reg} -qc {preprocess_Sc.qc_dir} -qc-subject sub-{ID}"
-              f" -qc-contrast {tag} -v 0")
-    os.system(cmd_qc)
+    print(f'=== PAM50 registration (MOTOR): Done  {ID} {tag} {run_name} ===', flush=True)
 
 
 def _get_seg_file(ID, source_tag, is_csf=False):
@@ -546,7 +514,7 @@ for ID_nb, ID in enumerate(IDs):
                         preprocessing_dir.format(ID), "func", rest_tag, "sct_fmri_moco",
                         f"sub-{ID}_{rest_tag}_*bold_moco_mean.nii.gz"))
                     if rest_moco_mean_candidates:
-                        epi_derive_seg_from_rest(ID, rest_tag, func_file, tag, params_moco, o_dir, redo, verbose)
+                        epi_derive_seg_from_rest(ID, rest_tag, func_file, tag, params_moco, o_dir, warpT2w_PAM50_files, redo, verbose)
                     else:
                         # REST not available for this acq (e.g. sub-099 1mm) — fall back to full processing.
                         print(f'No REST moco mean found for {rest_tag}; running full processing for MOTOR.', flush=True)
