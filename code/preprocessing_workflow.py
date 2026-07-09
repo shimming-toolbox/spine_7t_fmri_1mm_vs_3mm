@@ -277,13 +277,16 @@ def epi_derive_seg_from_rest(ID, rest_tag, func_file, tag, params_moco, o_dir, r
 
     copy_warping_fields_from_ref_tag(ID, tag, tag, preprocessing_dir)
 
-    # Generate QC by applying PAM50->REST then REST->MOTOR warps via sct_apply_transfo.
-    # Using two separate -w flags avoids the composed pam50_to_motor warp, which can be unreliable.
+    # Generate QC: bring PAM50 T2 into MOTOR space by chaining pam50_to_rest then warp_rest2motor.
+    # Use isct_antsApplyTransforms directly: sct_apply_transfo silently drops all but the last -w
+    # when multiple displacement fields are passed. ANTs applies -t flags right-to-left (last first),
+    # so listing pam50_to_rest before warp_rest2motor means warp_rest2motor is applied first
+    # (MOTOR→REST), then pam50_to_rest (REST→PAM50) — correct pull-convention composition.
     pam50_t2_reg = os.path.join(func2pam50_dir, f"PAM50_t2_reg{run_tag_str}.nii.gz")
     if not os.path.exists(pam50_t2_reg) or redo:
-        cmd = (f"sct_apply_transfo -i {pam50_t2} -d {moco_mean_f}"
-               f" -w {pam50_to_rest} -w {warp_rest2motor}"
-               f" -o {pam50_t2_reg} -x spline -v 0")
+        cmd = (f"isct_antsApplyTransforms -d 3 -i {pam50_t2} -o {pam50_t2_reg}"
+               f" -t {pam50_to_rest} -t {warp_rest2motor}"
+               f" -r {moco_mean_f} -n 'BSpline[3]'")
         os.system(cmd)
     cmd_qc = (f"sct_qc -i {moco_mean_f} -s {motor_sc_seg} -p sct_register_multimodal"
               f" -d {pam50_t2_reg} -qc {preprocess_Sc.qc_dir} -qc-subject sub-{ID}"
