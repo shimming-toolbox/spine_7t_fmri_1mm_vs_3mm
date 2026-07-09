@@ -144,7 +144,7 @@ Runs `preprocessing_workflow.py`. For each subject and acquisition:
 2. Detect centerline on mean → build moco mask
 3. Motion-correct time series (`sct_fmri_moco`)
 4. Segment cord on moco mean (`sct_deepseg`)
-5. Register PAM50 → REST moco mean (`coreg_img2PAM50`, initwarp = T2w PAM50 warp)
+5. Register PAM50 → REST moco mean (`sct_register_multimodal` via `coreg_img2PAM50`, initwarp = T2w PAM50 warp)
 
 REST is always processed first so MOTOR can borrow from it.
 
@@ -163,23 +163,24 @@ If no matching REST exists for this acquisition, falls back to full independent 
 The 1mm data is resampled to simulate 3mm z-resolution by averaging groups of slices:
 1. Average every 3 slices of the 1mm moco time series along z
 2. Copy segmentation from the 1mm source
-3. Copy PAM50 warp fields from the 1mm source — no new registration needed (FOV and geometry are identical)
+
+No PAM50 registration needed — `+avg3mm` is only used for native-space EPI comparison figures.
 
 **Derived — `+smooth3mm`** (z-smoothed, REST and MOTOR)
 
 The 1mm data is z-smoothed with a Gaussian kernel to match the 3mm point spread function:
 1. Smooth the 1mm moco time series along z
 2. Copy segmentation from the 1mm source
-3. Run a new `coreg_img2PAM50` (initwarp = T2w PAM50 warp) — used for the GLM, so a dedicated registration is preferred
+3. Copy PAM50 warp fields from the 1mm source — the smoothing does not change the geometry, so the 1mm registration is equally valid
 
 **Summary of warp reuse**
 
 | Acquisition | Segmentation source | PAM50 warp source |
 |---|---|---|
 | REST | `sct_deepseg` on REST moco mean | independent registration |
-| MOTOR | warped from REST via `sct_register_rest2motor` | independent registration (T2w initwarp) |
-| `+avg3mm` | copied from 1mm source | copied from 1mm source |
-| `+smooth3mm` | copied from 1mm source | independent registration (T2w initwarp) |
+| MOTOR | warped from REST via `sct_register_rest2motor` | composed from REST PAM50 warp + REST→MOTOR registration |
+| `+avg3mm` | copied from 1mm source | not needed (native space only) |
+| `+smooth3mm` | copied from 1mm source | copied from 1mm source |
 
 </details>
 
