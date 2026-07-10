@@ -1067,9 +1067,9 @@ class EpiComparison:
                     task_base_avg = self._get_task_of_moco_mean_same_vols(ID, name_base_avg)
                     task_slice_avg = self._get_task_of_moco_mean_same_vols(ID, name_slice_avg)
                     fname_base_avg = self._select_moco_mean_same_vols(ID, name_base_avg)
-                    fname_seg_base_avg, _, _ = get_fname_seg_and_warps(ID, task_base_avg, name_base_avg, self.config)
+                    fname_seg_base_avg, _, _ = get_fname_seg_and_warps(ID, task_base_avg, name_base_avg, self.config, require_warps=False)
                     fname_slice_avg = self._select_moco_mean_same_vols(ID, name_slice_avg)
-                    fname_seg_slice_avg, _, _ = get_fname_seg_and_warps(ID, task_slice_avg, name_slice_avg, self.config)
+                    fname_seg_slice_avg, _, _ = get_fname_seg_and_warps(ID, task_slice_avg, name_slice_avg, self.config, require_warps=False)
                     img_base_avg = nib.load(fname_base_avg).get_fdata()
                     img_slice_avg = nib.load(fname_slice_avg).get_fdata()
                     mask_base_avg = nib.load(fname_seg_base_avg).get_fdata()
@@ -1242,9 +1242,9 @@ class EpiComparison:
             task_base_avg = self._get_task_of_moco_mean_same_vols(ID, name_base_avg)
             task_slice_avg = self._get_task_of_moco_mean_same_vols(ID, name_slice_avg)
             fname_base_avg = self._select_moco_mean_same_vols(ID, name_base_avg)
-            fname_seg_base_avg, _, _ = get_fname_seg_and_warps(ID, task_base_avg, name_base_avg, self.config)
+            fname_seg_base_avg, _, _ = get_fname_seg_and_warps(ID, task_base_avg, name_base_avg, self.config, require_warps=False)
             fname_slice_avg = self._select_moco_mean_same_vols(ID, name_slice_avg)
-            fname_seg_slice_avg, _, _ = get_fname_seg_and_warps(ID, task_slice_avg, name_slice_avg, self.config)
+            fname_seg_slice_avg, _, _ = get_fname_seg_and_warps(ID, task_slice_avg, name_slice_avg, self.config, require_warps=False)
 
             img_baseline = nib.load(fname_baseline).get_fdata()
             img_slicewise = nib.load(fname_slicewise).get_fdata()
@@ -1552,7 +1552,7 @@ def create_mocomean_derived(ID, name_baseline, name_slicewise, config, path_outp
             shutil.copy(fname_src, fname_out)
 
 
-def get_fname_seg_and_warps(ID, task, acq_name, config):
+def get_fname_seg_and_warps(ID, task, acq_name, config, require_warps=True):
 
     task_name = f"task-{task}_acq-{acq_name}"
 
@@ -1566,6 +1566,9 @@ def get_fname_seg_and_warps(ID, task, acq_name, config):
     )
     if not os.path.exists(fname_seg):
         raise RuntimeError(f"Could not find a segmentation")
+
+    if not require_warps:
+        return fname_seg, None, None
 
     # Get warp from func to PAM50
     fname_warp_func_to_pam50 = os.path.join(
