@@ -131,6 +131,59 @@ Runs `preprocessing_workflow.py`. For each subject and acquisition:
 4. Registration of the mean functional image to the PAM50 template
 5. Compute tSNR maps from the motion-corrected **rest** data
 
+<details>
+<summary>Detailed processing per acquisition type</summary>
+
+**Anatomical (T2\*, once per subject)**
+1. Segment cord (`sct_deepseg`)
+2. Label vertebral discs (totalspineseg)
+3. Register T2\* to PAM50 template (`sct_register_to_template`) → produces the **T2w PAM50 warp**, reused as initwarp for all EPI registrations below
+
+**Functional — REST acquisitions** (`shimBase+3mm`, `shimSlice+3mm`, `shimBase+1mm+sms2`, `shimSlice+1mm+sms2`)
+1. Compute temporal mean
+2. Detect centerline on mean → build moco mask
+3. Motion-correct time series (`sct_fmri_moco`)
+4. Segment cord on moco mean (`sct_deepseg`)
+5. Register PAM50 → REST moco mean (`sct_register_multimodal` via `coreg_img2PAM50`, initwarp = T2w PAM50 warp)
+
+REST is always processed first so MOTOR can borrow from it.
+
+**Functional — MOTOR acquisitions** (`shimSlice+3mm`, `shimSlice+1mm+sms2`)
+
+These share the same FOV as the matching REST scan, so the REST segmentation is reused:
+1. Moco (temporal mean → centerline → `sct_fmri_moco`)
+2. Register REST moco mean → MOTOR moco mean (`sct_register_multimodal`, affine, output saved under `sct_register_rest2motor/`)
+3. Warp REST cord segmentation into MOTOR space via that registration
+4. Map PAM50 into MOTOR space by composing REST's PAM50 warp with the REST→MOTOR warp (`sct_apply_transfo -w PAM50_to_REST -w REST_to_MOTOR`) — no new registration needed
+
+If no matching REST exists for this acquisition, falls back to full independent processing.
+
+**Derived — `+avg3mm`** (slice-averaged, REST only)
+
+The 1mm data is resampled to simulate 3mm z-resolution by averaging groups of slices:
+1. Average every 3 slices of the 1mm moco time series along z
+2. Copy segmentation from the 1mm source
+
+No PAM50 registration needed — `+avg3mm` is only used for native-space EPI comparison figures.
+
+**Derived — `+smooth3mm`** (z-smoothed, REST and MOTOR)
+
+The 1mm data is z-smoothed with a Gaussian kernel to match the 3mm point spread function:
+1. Smooth the 1mm moco time series along z
+2. Copy segmentation from the 1mm source
+3. Copy PAM50 warp fields from the 1mm source — the smoothing does not change the geometry, so the 1mm registration is equally valid
+
+**Summary of warp reuse**
+
+| Acquisition | Segmentation source | PAM50 warp source |
+|---|---|---|
+| REST | `sct_deepseg` on REST moco mean | independent registration |
+| MOTOR | warped from REST via `sct_register_rest2motor` | composed from REST PAM50 warp + REST→MOTOR registration |
+| `+avg3mm` | copied from 1mm source | not needed (native space only) |
+| `+smooth3mm` | copied from 1mm source | copied from 1mm source |
+
+</details>
+
 ```bash
 bash "${PATH_CODE}/code/run_all_processing.sh" \
   --path-data "${PATH_DATA}" --path-code "${PATH_CODE}" \
@@ -149,7 +202,7 @@ After running preprocessing, open the QC report (`derivatives/processing/qc/inde
 | 3 | Anat-to-template registration | search `register_to_template`, filter contrast to **Anat** only | re-run with corrected seg/labels from steps 1–2 |
 | 4 | Moco centerline (motion-correction mask) | search `_bold_tmean_centerline` | `sub-<ID>/func/<filename>_tmean_centerline.nii.gz` |
 | 5 | Motion correction (`sct_fmri_moco`) | filter function **sct_fmri_moco**, scroll through all entries | re-run moco with corrected centerline from step 4 |
-| 6 | Functional cord segmentation | search `_bold_moco_mean_seg`, filter function `sct_deepseg` | `sub-<ID>/func/<filename>_bold_moco_mean_seg.nii.gz` |
+| 6 | Functional cord segmentation (**REST only** — MOTOR seg is derived from this) | search `_bold_moco_mean_seg`, filter function `sct_deepseg` | `sub-<ID>/func/<filename>_bold_moco_mean_seg.nii.gz` |
 | 7 | Rest-to-motor registration | search `sct_register_rest2motor` | re-run with corrected seg from step 6 |
 | 8 | EPI-to-template registration | search `PAM50_t2_reg` | re-run with corrected seg from step 6 |
 
