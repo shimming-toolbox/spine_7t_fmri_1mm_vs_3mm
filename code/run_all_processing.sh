@@ -86,6 +86,7 @@ run_step() {
     local label="$1"; local logfile="$2"; shift 2
     echo ""
     echo "=== Starting ${label} === (log: log/${logfile})"
+    local t_start=$SECONDS
     # Run directly (no nohup/&): screen handles disconnection.
     # tee shows output live in screen AND saves to the log file.
     "$@" 2>&1 | tee "${logfile}"
@@ -95,7 +96,9 @@ run_step() {
         echo "ERROR: ${label} failed (exit code ${rc}). Stopping pipeline."
         exit "${rc}"
     fi
-    echo "=== ${label} done ==="
+    local elapsed=$(( SECONDS - t_start ))
+    printf "=== %s done === (elapsed: %dh %02dm %02ds)\n" \
+        "${label}" $(( elapsed/3600 )) $(( elapsed%3600/60 )) $(( elapsed%60 ))
 }
 
 if [ "${RUN_PREPROSS}" = true ]; then
