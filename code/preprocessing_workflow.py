@@ -33,7 +33,6 @@ import pandas as pd
 path_code = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(os.path.join(path_code, "code"))  # Change this line according to your directory
 from preprocess import Preprocess_main, Preprocess_Sc, copy_warping_fields_from_ref_tag, copy_segmentation_from_ref_tag
-from preprocess import copy_csf_segmentation_from_ref_tag
 import postprocess
 import utils
 
@@ -132,9 +131,8 @@ def epi_full_processing(ID, func_file, tag, manual_centerline, warpT2w_PAM50_fil
     print(f'=== Moco : Done  {ID} {tag} {run_name} ===', flush=True)
 
     # ------------------------------------------------------------------
-    # ------ Run func cord and CSF segmentation
+    # ------ Run func cord segmentation
     # ------------------------------------------------------------------
-    # Cord segmentation
     seg_func_sc_file = preprocess_Sc.segmentation(ID=ID,
                                                   i_img=moco_mean_f,
                                                   task_name=tag,
@@ -143,15 +141,6 @@ def epi_full_processing(ID, func_file, tag, manual_centerline, warpT2w_PAM50_fil
                                                   redo=redo,
                                                   redo_qc=redo,  # should be true if you have done manual correction
                                                   verbose=verbose)
-    # csf segmentation
-    preprocess_Sc.segmentation(ID=ID,
-                               i_img=moco_mean_f,
-                               task_name=tag, contrast_anat="t2s",
-                               img_type="func",
-                               tissue="csf",
-                               redo_qc=redo,  # should be true if you have done manual correction
-                               redo=redo,
-                               verbose=verbose)
 
     print(f'=== Func segmentation : Done  {ID} {tag} {run_name} ===', flush=True)
 
@@ -170,9 +159,8 @@ def epi_full_processing(ID, func_file, tag, manual_centerline, warpT2w_PAM50_fil
                                                    redo=redo,
                                                    verbose=verbose)
 
-    # Copy the segmentation, scf segmentation and warping field to where the final files are expected to be
+    # Copy the segmentation and warping field to where the final files are expected to be
     copy_segmentation_from_ref_tag(ID, tag, tag, manual_dir, preprocessing_dir)
-    copy_csf_segmentation_from_ref_tag(ID, tag, tag, manual_dir, preprocessing_dir)
     copy_warping_fields_from_ref_tag(ID, tag, tag, preprocessing_dir)
 
 
@@ -209,8 +197,6 @@ def epi_derive_seg_from_rest(ID, rest_tag, func_file, tag, params_moco, o_dir, r
     rest_moco_mean = rest_moco_mean_candidates[0]
     rest_sc_seg  = os.path.join(preprocessing_dir.format(ID), "func", rest_tag,
                                 f"sub-{ID}_{rest_tag}_bold_moco_mean_seg.nii.gz")
-    rest_csf_seg = os.path.join(preprocessing_dir.format(ID), "func", rest_tag,
-                                f"sub-{ID}_{rest_tag}_bold_moco_mean_CSF_seg.nii.gz")
 
     # Register REST mean-moco (moving) -> MOTOR mean-moco (fixed)
     reg_dir = os.path.join(o_dir, "sct_register_rest2motor")
@@ -233,14 +219,12 @@ def epi_derive_seg_from_rest(ID, rest_tag, func_file, tag, params_moco, o_dir, r
         os.rename(fwd[0], warp_rest2motor)
         os.rename(inv[0], warp_motor2rest)
 
-    # Apply warp to REST SC and CSF segmentations -> MOTOR space
-    motor_sc_seg  = os.path.join(o_dir, f"sub-{ID}_{tag}_bold_moco_mean_seg.nii.gz")
-    motor_csf_seg = os.path.join(o_dir, f"sub-{ID}_{tag}_bold_moco_mean_CSF_seg.nii.gz")
-    for rest_seg, motor_seg in [(rest_sc_seg, motor_sc_seg), (rest_csf_seg, motor_csf_seg)]:
-        if not os.path.exists(motor_seg) or redo:
-            cmd_apply = (f"sct_apply_transfo -i {rest_seg} -d {moco_mean_f}"
-                         f" -w {warp_rest2motor} -o {motor_seg} -x nn -v 0")
-            os.system(cmd_apply)
+    # Apply warp to REST SC segmentation -> MOTOR space
+    motor_sc_seg = os.path.join(o_dir, f"sub-{ID}_{tag}_bold_moco_mean_seg.nii.gz")
+    if not os.path.exists(motor_sc_seg) or redo:
+        cmd_apply = (f"sct_apply_transfo -i {rest_sc_seg} -d {moco_mean_f}"
+                     f" -w {warp_rest2motor} -o {motor_sc_seg} -x nn -v 0")
+        os.system(cmd_apply)
     print(f'=== Derived seg from REST: Done  {ID} {tag} {run_name} ===', flush=True)
 
     # Compose PAM50<->MOTOR warp files from REST's PAM50 warp + REST<->MOTOR registration.
@@ -295,24 +279,22 @@ def epi_derive_seg_from_rest(ID, rest_tag, func_file, tag, params_moco, o_dir, r
     print(f'=== PAM50 registration (MOTOR, warp composition): Done  {ID} {tag} {run_name} ===', flush=True)
 
 
-def _get_seg_file(ID, source_tag, is_csf=False):
-    """Return path to SC (or CSF) segmentation for source_tag, preferring manual over auto.
+def _get_seg_file(ID, source_tag):
+    """Return path to SC segmentation for source_tag, preferring manual over auto.
 
-    Checks sct_deepseg/sct_propseg subfolders first (REST, produced by epi_full_processing),
+    Checks sct_deepseg subfolder first (REST, produced by epi_full_processing),
     then falls back to the tag root (MOTOR, produced by epi_derive_seg_from_rest).
     """
     tag_dir = os.path.join(preprocessing_dir.format(ID), "func", source_tag)
-    suffix = "CSF_seg" if is_csf else "seg"
-    sub_dir = "sct_propseg" if is_csf else "sct_deepseg"
     manual_files = glob.glob(os.path.join(manual_dir, f"sub-{ID}", "func",
-                                          f"sub-{ID}_{source_tag}_*bold_moco_mean_{suffix}.nii.gz"))
-    auto_files = (glob.glob(os.path.join(tag_dir, sub_dir,
-                                         f"sub-{ID}_{source_tag}_*bold_moco_mean_{suffix}.nii.gz")) or
+                                          f"sub-{ID}_{source_tag}_*bold_moco_mean_seg.nii.gz"))
+    auto_files = (glob.glob(os.path.join(tag_dir, "sct_deepseg",
+                                         f"sub-{ID}_{source_tag}_*bold_moco_mean_seg.nii.gz")) or
                   glob.glob(os.path.join(tag_dir,
-                                         f"sub-{ID}_{source_tag}_*bold_moco_mean_{suffix}.nii.gz")))
+                                         f"sub-{ID}_{source_tag}_*bold_moco_mean_seg.nii.gz")))
     files = manual_files or auto_files
     if not files:
-        raise RuntimeError(f"No {'CSF ' if is_csf else ''}segmentation found for {source_tag} sub-{ID}")
+        raise RuntimeError(f"No segmentation found for {source_tag} sub-{ID}")
     return sorted(files)[0]
 
 
@@ -354,17 +336,14 @@ def epi_avg_slices_processing(ID, source_tag, tag, n_slices_avg, redo, verbose):
     for moco_f, moco_mean_f, run_name in epi_avg_slices_moco(ID, source_tag, tag, n_slices_avg, redo, verbose):
         seg_func_sc_file = os.path.join(preprocessing_dir.format(ID), "func", tag,
                                         f"sub-{ID}_{tag}_bold_moco_mean_seg.nii.gz")
-        csf_func_file = os.path.join(preprocessing_dir.format(ID), "func", tag,
-                                     f"sub-{ID}_{tag}_bold_moco_mean_CSF_seg.nii.gz")
-        for dest, is_csf in [(seg_func_sc_file, False), (csf_func_file, True)]:
-            if not os.path.exists(dest) or redo:
-                src = _get_seg_file(ID, source_tag, is_csf=is_csf)
-                tmp = dest.replace(".nii.gz", "_tmp.nii.gz")
-                utils.average_slices_img(i_img=src, o_img=tmp, n_slices_avg=n_slices_avg, redo=True)
-                nii = nib.load(tmp)
-                binary = (nii.get_fdata() >= 0.5).astype(np.uint8)
-                nib.save(nib.Nifti1Image(binary, nii.affine, nii.header), dest)
-                os.remove(tmp)
+        if not os.path.exists(seg_func_sc_file) or redo:
+            src = _get_seg_file(ID, source_tag)
+            tmp = seg_func_sc_file.replace(".nii.gz", "_tmp.nii.gz")
+            utils.average_slices_img(i_img=src, o_img=tmp, n_slices_avg=n_slices_avg, redo=True)
+            nii = nib.load(tmp)
+            binary = (nii.get_fdata() >= 0.5).astype(np.uint8)
+            nib.save(nib.Nifti1Image(binary, nii.affine, nii.header), seg_func_sc_file)
+            os.remove(tmp)
 
         print(f'=== Derived seg (avg{n_slices_avg}x from {source_tag}): Done {ID} {tag} {run_name} ===', flush=True)
 
@@ -407,11 +386,8 @@ def epi_smooth_slices_processing(ID, source_tag, tag, smooth_width, redo, verbos
     for moco_f, moco_mean_f, run_name in epi_smooth_slices_moco(ID, source_tag, tag, smooth_width, redo, verbose):
         seg_func_sc_file = os.path.join(preprocessing_dir.format(ID), "func", tag,
                                         f"sub-{ID}_{tag}_bold_moco_mean_seg.nii.gz")
-        csf_func_file = os.path.join(preprocessing_dir.format(ID), "func", tag,
-                                     f"sub-{ID}_{tag}_bold_moco_mean_CSF_seg.nii.gz")
-        for dest, is_csf in [(seg_func_sc_file, False), (csf_func_file, True)]:
-            if not os.path.exists(dest) or redo:
-                shutil.copy(_get_seg_file(ID, source_tag, is_csf=is_csf), dest)
+        if not os.path.exists(seg_func_sc_file) or redo:
+            shutil.copy(_get_seg_file(ID, source_tag), seg_func_sc_file)
 
         print(f'=== Derived seg (copy from {source_tag}): Done {ID} {tag} {run_name} ===', flush=True)
 
@@ -576,7 +552,6 @@ for ID_nb, ID in enumerate(IDs):
                                                                 use_dl=True)
 
                     copy_segmentation_from_ref_tag(ID, tag, ref_tag, manual_dir, preprocessing_dir)
-                    copy_csf_segmentation_from_ref_tag(ID, tag, ref_tag, manual_dir, preprocessing_dir)
                     copy_warping_fields_from_ref_tag(ID, tag, ref_tag, preprocessing_dir)
 
                 print(f'=== Func registration : Done  {ID} {tag} {run_name} ===')

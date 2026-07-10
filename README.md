@@ -202,7 +202,7 @@ After running preprocessing, open the QC report (`derivatives/processing/qc/inde
 | 3 | Anat-to-template registration | search `register_to_template`, filter contrast to **Anat** only | re-run with corrected seg/labels from steps 1–2 |
 | 4 | Moco centerline (motion-correction mask) | search `_bold_tmean_centerline` | `sub-<ID>/func/<filename>_tmean_centerline.nii.gz` |
 | 5 | Motion correction (`sct_fmri_moco`) | filter function **sct_fmri_moco**, scroll through all entries | re-run moco with corrected centerline from step 4 |
-| 6 | Functional cord segmentation (**REST only** — MOTOR seg is derived from this) | search `_bold_moco_mean_seg`, filter function `sct_deepseg` | `sub-<ID>/func/<filename>_bold_moco_mean_seg.nii.gz` |
+| 6 | Functional cord segmentation (**REST only** — MOTOR seg is derived from this; no CSF mask needed) | search `_bold_moco_mean_seg`, filter function `sct_deepseg` | `sub-<ID>/func/<filename>_bold_moco_mean_seg.nii.gz` |
 | 7 | Rest-to-motor registration | search `sct_register_rest2motor` | re-run with corrected seg from step 6 |
 | 8 | EPI-to-template registration | search `PAM50_t2_reg` | re-run with corrected seg from step 6 |
 
