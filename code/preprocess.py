@@ -637,7 +637,7 @@ class Preprocess_Sc:
                 print(f">>>>> Running totalspineseg for sub-{ID}...")
 
                 fname_out = os.path.join(o_folder, f"{base_name}.nii.gz")
-                cmd = (f"sct_deepseg spine -i {i_img} -o {fname_out} -qc {self.qc_dir} -qc-subject sub-{ID} -qc-contrast {task_name or 'anat'}")
+                cmd = (f"sct_deepseg spine -i {i_img} -o {fname_out}")
 
             else:
                 nb = labels
