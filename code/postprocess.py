@@ -441,7 +441,11 @@ class GLM_main:
         FD_values = {"IDs": [], "mean_FD": [],"acq":[]}
         for i, ID in enumerate(IDs):
             preprocess_dir = os.path.join(self.config["raw_dir"], self.config["preprocess_dir"]["main_dir"].format(ID), "func")
-            moco_param_file = glob.glob(os.path.join(preprocess_dir, f"{task_name}","sct_fmri_moco", f"moco_params*{run_name[i]}.txt"))[0]
+            matches = glob.glob(os.path.join(preprocess_dir, f"{task_name}","sct_fmri_moco", f"moco_params*{run_name[i]}.txt"))
+            if not matches:
+                print(f"WARNING: No moco_params file found for sub-{ID} {task_name} run={run_name[i]}, skipping FD.", flush=True)
+                continue
+            moco_param_file = matches[0]
             params_data=pd.read_csv(moco_param_file, delimiter=',', header=None)
 
             # calulate the mean FD from the moco_params file, which contains the FD for each volume
