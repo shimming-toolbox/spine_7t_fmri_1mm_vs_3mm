@@ -197,7 +197,7 @@ import time as _time
 values_csv_pair={};metrics_csv_pair={}
 for cluster_corr in [0.01,0.001]:
     values_csv_pair[cluster_corr]={};metrics_csv_pair[cluster_corr]={}
-    for vox_thr in [0.005]:
+    for vox_thr in [0.005, 0.05]:
         values_csv_pair[cluster_corr][vox_thr]=[];metrics_csv_pair[cluster_corr][vox_thr]=[]
         for task_name in ["motor"]:
             for acq_name in config["design_exp"]["acq_names"]:
