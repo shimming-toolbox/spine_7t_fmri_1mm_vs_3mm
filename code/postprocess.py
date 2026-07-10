@@ -609,13 +609,16 @@ class TSNR_main:
                     # Extract sSNR
                     ssnr = compute_SNR(selected_mean_file, fname_mask)
 
+                    # Use shim condition label (shimBase / shimSlice) so the boxplot
+                    # x_order=["shimBase","shimSlice"] matches regardless of resolution suffix.
+                    shim_label = "shimBase" if "Base" in acq_name else "shimSlice"
                     for metric in ["tsnr", "ssnr"]:
                         values = tsnr_mean if metric=="tsnr" else ssnr
                         if len(dfs[metric]) == 0:
-                            dfs[metric] = pd.DataFrame([[ID, task, acq_name, values]], columns=dfs[metric].columns)
+                            dfs[metric] = pd.DataFrame([[ID, task, shim_label, values]], columns=dfs[metric].columns)
                         else:
                             dfs[metric] = pd.concat(
-                                [pd.DataFrame([[ID, task, acq_name, values]], columns=dfs[metric].columns), dfs[metric]], ignore_index=True)
+                                [pd.DataFrame([[ID, task, shim_label, values]], columns=dfs[metric].columns), dfs[metric]], ignore_index=True)
 
         # Keep only 'rest' rows for IDs that have both 'motor' and 'rest'
         for metric in ["tsnr","ssnr"]:
