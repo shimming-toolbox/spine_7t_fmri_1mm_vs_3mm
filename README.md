@@ -234,7 +234,7 @@ Runs `secondlevel_workflow.py`. Across subjects:
 
 1. Average tSNR maps in PAM50 space per acquisition condition
 2. Compute average framewise displacement (FD) across conditions
-3. Non-parametric permutation test (10 000 permutations) on first-level z-maps to produce group activation maps in PAM50 space; cluster-level correction at p < 0.01 and p < 0.001
+3. Non-parametric permutation test on first-level z-maps to produce group activation maps in PAM50 space; cluster-level correction at p < 0.01 and p < 0.001
 4. Extract metrics (number of activated voxels, distribution) per condition
 5. Intraclass correlation coefficient (ICC) for test-retest reproducibility
 
@@ -242,6 +242,20 @@ Runs `secondlevel_workflow.py`. Across subjects:
 bash "${PATH_CODE}/code/run_all_processing.sh" \
   --path-data "${PATH_DATA}" --path-code "${PATH_CODE}" \
   --tasks motor --secondlevel
+```
+
+Two optional flags control the permutation test speed vs. precision trade-off:
+
+| Flag | Default | Description |
+|---|---|---|
+| `--n-perm` | 1000 | Number of permutations. Use 10 000 for publication-quality results. |
+| `--n-jobs` | 10 | Parallel workers. Reduce if the machine has fewer cores. |
+
+Example for a high-precision run:
+```bash
+bash "${PATH_CODE}/code/run_all_processing.sh" \
+  --path-data "${PATH_DATA}" --path-code "${PATH_CODE}" \
+  --tasks motor --secondlevel --n-perm 10000 --n-jobs 10
 ```
 
 ---
