@@ -141,10 +141,6 @@ for metric in ["tsnr", "ssnr"]:
         continue
     (ymin, ymax) = (6, 17) if metric == "tsnr" else (1.5, 4.5)
     y_label = "temporal SNR" if metric == "tsnr" else "spatial SNR"
-    df_box = pd.read_csv(csv_matches[0])
-    if df_box["IDs"].nunique() < 2:
-        print(f"INFO: Only {df_box['IDs'].nunique()} subject(s) — skipping {metric} boxplot.", flush=True)
-        continue
     try:
         figures.boxplots(
             csv_file=csv_matches[0],
