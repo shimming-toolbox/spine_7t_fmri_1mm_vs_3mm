@@ -23,6 +23,8 @@ RUN_FIRSTLEVEL=false
 RUN_SECONDLEVEL=false
 RUN_FIGURES=false
 REDO=false
+N_PERM=1000
+N_JOBS=10
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
@@ -37,6 +39,8 @@ while [[ $# -gt 0 ]]; do
         --secondlevel) RUN_SECONDLEVEL=true; shift;;
         --figures) RUN_FIGURES=true; shift;;
         --redo) REDO=true; shift;;
+        --n-perm) N_PERM="$2"; shift 2 ;;
+        --n-jobs) N_JOBS="$2"; shift 2 ;;
       *) echo "Unknown argument $1"; exit 1 ;;
     esac
 done
@@ -129,7 +133,7 @@ fi
 # --------------------------
 if [ "${RUN_SECONDLEVEL}" = true ]; then
     run_step "Second level analysis" "secondlevel_${timestamp}.txt" \
-        ${PYTHON} -u ../code/secondlevel_workflow.py --path-data "${PATH_DATA}" --ids "${IDs[@]}" "${TASKS_ARG[@]}" --redo "${REDO}"
+        ${PYTHON} -u ../code/secondlevel_workflow.py --path-data "${PATH_DATA}" --ids "${IDs[@]}" "${TASKS_ARG[@]}" --redo "${REDO}" --n-perm "${N_PERM}" --n-jobs "${N_JOBS}"
 fi
 
 # --------------------------

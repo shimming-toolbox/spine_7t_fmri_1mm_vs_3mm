@@ -25,6 +25,8 @@ parser.add_argument("--tasks", nargs='+', default=[""])
 parser.add_argument("--verbose", default="False")
 parser.add_argument("--redo", default="True")
 parser.add_argument("--path-data", required=True)
+parser.add_argument("--n-perm", type=int, default=1000, help="Number of permutations for non-parametric GLM (default: 1000)")
+parser.add_argument("--n-jobs", type=int, default=10, help="Number of parallel jobs for permutation testing (default: 10)")
 args = parser.parse_args()
 
 IDs = args.ids
@@ -32,6 +34,8 @@ tasks = args.tasks
 verbose = args.verbose.lower() == "true"
 redo = args.redo.lower() == "true"
 path_data = os.path.abspath(args.path_data)
+n_perm = args.n_perm
+n_jobs = args.n_jobs
 
 config["raw_dir"]=path_data
 config["code_dir"]=path_code
@@ -225,7 +229,8 @@ for cluster_corr in [0.01,0.001]:
                                                                 task_name=tag,
                                                                 run_name="",
                                                                 parametric=False,
-                                                                n_perm=10000,
+                                                                n_perm=n_perm,
+                                                                n_jobs=n_jobs,
                                                                 vox_thr=vox_thr,
                                                                 cluster_corr=cluster_corr,
                                                                 redo=redo,
