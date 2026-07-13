@@ -29,7 +29,7 @@ See: https://openneuro.org/datasets/ds007932/download
 │   │   ├── preprocessing_workflow.py
 │   │   ├── firstlevel_workflow.py
 │   │   ├── secondlevel_workflow.py
-│   │   ├── compare_workflow.py
+│   │   ├── figures_workflow.py
 │   │   ├── run_all_processing.sh
 │   │   └── ...
 │   ├── config

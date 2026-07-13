@@ -47,8 +47,13 @@ figures = figures_module.Figures_main(config, IDs=IDs)
 # Directories
 first_level_dir  = os.path.join(config["raw_dir"], config["first_level"]["dir"])
 second_level_dir = os.path.join(config["raw_dir"], config["second_level"]["dir"])
-output_fig = os.path.join(config["raw_dir"], config["figures_dir"]["main_dir"], "second_level")
-os.makedirs(output_fig, exist_ok=True)
+output_fig_second_level  = os.path.join(config["raw_dir"], config["figures_dir"]["main_dir"], "second_level")
+output_fig_first_level   = os.path.join(config["raw_dir"], config["figures_dir"]["main_dir"], "first_level")
+output_fig_preprocessing = os.path.join(config["raw_dir"], config["figures_dir"]["main_dir"], "preprocessing")
+output_fig = output_fig_second_level  # kept for GLM/ICC figures
+os.makedirs(output_fig_second_level, exist_ok=True)
+os.makedirs(output_fig_first_level, exist_ok=True)
+os.makedirs(output_fig_preprocessing, exist_ok=True)
 
 print("=== figures_workflow Start ===", flush=True)
 print(f"Participants: {IDs}", flush=True)
@@ -122,33 +127,8 @@ except Exception as e:
     print(f"WARNING: First-level maps skipped: {e}", flush=True)
 
 # ------------------------------------------------------------------
-# 3. tSNR boxplots
+# 3. tSNR / sSNR 4-condition plots  →  see section 7g (generated after metrics)
 # ------------------------------------------------------------------
-print("", flush=True)
-print("=== tSNR / sSNR boxplots ===", flush=True)
-tsnr_dir = os.path.join(
-    config["raw_dir"],
-    config["first_level"]["dir"].format("snr", "").split("sub")[0]
-)
-for metric in ["tsnr", "ssnr"]:
-    csv_matches  = glob.glob(os.path.join(tsnr_dir, f"{metric}*_metrics_reduced.csv"))
-    stat_matches = glob.glob(os.path.join(tsnr_dir, f"{metric}*_metrics_reduced_stats.csv"))
-    if not csv_matches or not stat_matches:
-        print(f"INFO: No {metric} CSV found, skipping boxplot.", flush=True)
-        continue
-    (ymin, ymax) = (6, 17) if metric == "tsnr" else (1.5, 4.5)
-    y_label = "temporal SNR" if metric == "tsnr" else "spatial SNR"
-    try:
-        figures.boxplots(
-            csv_file=csv_matches[0],
-            output_fname=os.path.join(output_fig, f"{len(IDs)}_{metric}_boxplot.png"),
-            ymin=ymin, ymax=ymax, stats_file=stat_matches[0],
-            specify_y_label=y_label,
-            x_data="acq", x_order=["shimBase", "shimSlice"],
-            indiv_values=True,
-            y_data=metric, redo=redo)
-    except Exception as e:
-        print(f"WARNING: {metric} boxplot failed: {e}", flush=True)
 
 # ------------------------------------------------------------------
 # 4. tSNR group maps (native 3mm vs avg3mm)
@@ -331,22 +311,22 @@ for icc_label, subdir in [
 
 
 # ------------------------------------------------------------------
-# 7. compare_1mm_3mm: extract metrics then generate figures
+# 7. metrics extraction + comparison figures
 # ------------------------------------------------------------------
 print("", flush=True)
-print("=== compare_1mm_3mm: metric extraction + figures ===", flush=True)
+print("=== metrics extraction + comparison figures ===", flush=True)
 
-from utils import compute_tsnr_map
+from utils import compute_tsnr_map, compute_SNR
 
-out_dir         = os.path.join(path_data, "derivatives", "processing", "compare_1mm_3mm")
-fig_dir_compare = os.path.join(path_data, "derivatives", "processing", "figures", "compare_1mm_3mm")
+out_dir         = os.path.join(path_data, "derivatives", "processing", "figures", "metrics")
 preprocessing_dir_compare = os.path.join(path_data, config["preprocess_dir"]["main_dir"])
 tsnr_precomp_dir = os.path.join(path_data, config["first_level"]["dir"].format("snr", "").split("sub")[0])
 os.makedirs(out_dir, exist_ok=True)
-os.makedirs(fig_dir_compare, exist_ok=True)
 
 REGULAR_ACQS = config["design_exp"]["acq_names"]
-DERIVED_ACQS = [k for k in config.get("derived_acq", {}) if "smooth3mm" in k]
+SMOOTH_ACQS  = [k for k in config.get("derived_acq", {}) if "smooth3mm" in k]
+AVG_ACQS     = [k for k in config.get("derived_acq", {}) if "avg3mm"    in k]
+DERIVED_ACQS = SMOOTH_ACQS + AVG_ACQS
 ALL_ACQS     = REGULAR_ACQS + DERIVED_ACQS
 
 SHIM_TRIPLETS = [
@@ -383,6 +363,14 @@ def _get_seg(ID, task, acq_name):
         preprocessing_dir_compare.format(ID), "func", tag,
         f"sub-{ID}_{tag}_bold_moco_mean_seg.nii.gz"
     )
+
+
+def _get_moco_mean(ID, task, acq_name):
+    tag = f"task-{task}_acq-{acq_name}"
+    tag_dir = os.path.join(preprocessing_dir_compare.format(ID), "func", tag)
+    cands = (glob.glob(os.path.join(tag_dir, "sct_fmri_moco", f"sub-{ID}_{tag}*_bold_moco_mean.nii.gz")) or
+             glob.glob(os.path.join(tag_dir, f"sub-{ID}_{tag}*_bold_moco_mean.nii.gz")))
+    return sorted(cands)[-1] if cands else None
 
 
 def wilcoxon_str(a, b):
@@ -440,7 +428,7 @@ tsnr_csv = os.path.join(out_dir, "tsnr_sc_mask.csv")
 if not os.path.exists(tsnr_csv) or redo:
     records = []
     for ID in IDs:
-        for task in all_tasks:
+        for task in ["rest"]:
             for acq_name in ALL_ACQS:
                 tag = f"task-{task}_acq-{acq_name}"
                 if acq_name in DERIVED_ACQS:
@@ -457,11 +445,22 @@ if not os.path.exists(tsnr_csv) or redo:
                 vals = nib.load(tsnr_map).get_fdata()[nib.load(seg_path).get_fdata() > 0]
                 if vals.size == 0:
                     continue
-                records.append({"subject": ID, "task": task, "acq": acq_name, "tsnr_sc": float(np.mean(vals))})
+                ssnr_val = None
+                moco_mean = _get_moco_mean(ID, task, acq_name)
+                if moco_mean and os.path.exists(moco_mean):
+                    try:
+                        ssnr_val = float(compute_SNR(moco_mean, seg_path))
+                    except Exception:
+                        pass
+                records.append({"subject": ID, "task": task, "acq": acq_name,
+                                 "tsnr_sc": float(np.mean(vals)), "ssnr_sc": ssnr_val})
     pd.DataFrame(records).to_csv(tsnr_csv, index=False)
     print(f"Saved: {tsnr_csv}", flush=True)
 
-df_tsnr = pd.read_csv(tsnr_csv)
+try:
+    df_tsnr = pd.read_csv(tsnr_csv)
+except pd.errors.EmptyDataError:
+    df_tsnr = pd.DataFrame()
 
 # --- 7b. BOLD sensitivity ---
 bold_csv = os.path.join(out_dir, "bold_sensitivity.csv")
@@ -492,12 +491,17 @@ if not os.path.exists(bold_csv) or redo:
         bold_df.to_csv(bold_csv, index=False)
         print(f"Saved: {bold_csv}", flush=True)
 else:
-    bold_df = pd.read_csv(bold_csv)
+    try:
+        bold_df = pd.read_csv(bold_csv)
+    except pd.errors.EmptyDataError:
+        bold_df = pd.DataFrame()
 
 # --- 7c. MI with T2* GRE ---
-mi_csv  = os.path.join(out_dir, "mi_t2star.csv")
-mi_cache = os.path.join(out_dir, "t2star_pam50")
+mi_csv   = os.path.join(out_dir, "mi_t2star.csv")
+mi_cache = os.path.join(out_dir, "t2star_in_epi")
 os.makedirs(mi_cache, exist_ok=True)
+
+manual_dir_compare = os.path.join(path_data, config["manual_dir"])
 
 def _compute_mi(x, y, bins=MI_BINS):
     hist2d, _, _ = np.histogram2d(x, y, bins=bins)
@@ -507,58 +511,95 @@ def _compute_mi(x, y, bins=MI_BINS):
     mask = pxy > 0
     return float(np.sum(pxy[mask] * np.log(pxy[mask] / (px * py)[mask])))
 
-def _t2star_in_pam50(ID):
-    out_path = os.path.join(mi_cache, f"sub-{ID}_T2star_inPAM50.nii.gz")
+def _t2star_in_epi(ID, tag):
+    """Register T2*w -> EPI space using centermass on SC segs, return path to warped T2*w."""
+    tag_cache = os.path.join(mi_cache, f"sub-{ID}", tag)
+    out_path  = os.path.join(tag_cache, f"sub-{ID}_T2star_in_EPI.nii.gz")
     if os.path.exists(out_path) and not redo:
         return out_path
+
     t2star = os.path.join(path_data, f"sub-{ID}", "anat", f"sub-{ID}_T2star.nii.gz")
-    warp   = os.path.join(preprocessing_dir_compare.format(ID), "anat", "sct_register_to_template",
-                          f"sub-{ID}_from-anat_to-PAM50_mode-image_xfm.nii.gz")
-    template = os.path.join(path_code, "template", config["PAM50_t2"])
-    if not os.path.exists(t2star) or not os.path.exists(warp):
+    if not os.path.exists(t2star):
         return None
-    ret = os.system(f"sct_apply_transfo -i {t2star} -d {template} -w {warp} -o {out_path} -x spline")
-    return out_path if ret == 0 and os.path.exists(out_path) else None
+
+    # T2*w seg: prefer manual correction
+    manual_t2star_seg = os.path.join(manual_dir_compare, f"sub-{ID}", "anat", f"sub-{ID}_T2star_seg.nii.gz")
+    auto_t2star_seg   = os.path.join(preprocessing_dir_compare.format(ID), "anat", "sct_deepseg",
+                                     f"sub-{ID}_T2star_seg.nii.gz")
+    t2star_seg = manual_t2star_seg if os.path.exists(manual_t2star_seg) else auto_t2star_seg
+    if not os.path.exists(t2star_seg):
+        return None
+
+    tag_dir = os.path.join(preprocessing_dir_compare.format(ID), "func", tag)
+    epi_seg_cands = (glob.glob(os.path.join(tag_dir, f"sub-{ID}_{tag}*_bold_moco_mean_seg.nii.gz")) or
+                     glob.glob(os.path.join(tag_dir, "sct_deepseg", f"sub-{ID}_{tag}*_bold_moco_mean_seg.nii.gz")))
+    epi_moco_cands = glob.glob(os.path.join(tag_dir, "sct_fmri_moco", f"sub-{ID}_{tag}*_bold_moco_mean.nii.gz"))
+    if not epi_seg_cands or not epi_moco_cands:
+        return None
+    epi_seg  = sorted(epi_seg_cands)[0]
+    epi_mean = sorted(epi_moco_cands)[-1]
+
+    os.makedirs(tag_cache, exist_ok=True)
+    cmd = (f"sct_register_multimodal -i {t2star} -iseg {t2star_seg}"
+           f" -d {epi_mean} -dseg {epi_seg}"
+           f" -param step=1,type=seg,algo=centermass"
+           f" -ofolder {tag_cache} -x spline -v 0")
+    ret = os.system(cmd)
+    # sct_register_multimodal names output after the moving image basename
+    t2star_base = os.path.basename(t2star).replace(".nii.gz", "")
+    reg_out = os.path.join(tag_cache, f"{t2star_base}_reg.nii.gz")
+    if ret != 0 or not os.path.exists(reg_out):
+        return None
+    os.rename(reg_out, out_path)
+    return out_path
 
 if not os.path.exists(mi_csv) or redo:
-    if not os.path.exists(pam50_mask_path):
-        print(f"WARNING: PAM50 cord mask not found, skipping MI.", flush=True)
-        mi_df = pd.DataFrame()
-    else:
-        pam50_mask_data = nib.load(pam50_mask_path).get_fdata() > 0
-        mi_records = []
-        for ID in IDs:
-            t2star_pam50 = _t2star_in_pam50(ID)
-            if t2star_pam50 is None:
-                print(f"WARNING: Could not warp T2*w for sub-{ID}, skipping.", flush=True)
-                continue
-            t2_vals = nib.load(t2star_pam50).get_fdata()[pam50_mask_data]
-            for task in all_tasks:
-                for acq_name in ALL_ACQS:
-                    tag = f"task-{task}_acq-{acq_name}"
-                    epi_cands = glob.glob(os.path.join(
-                        preprocessing_dir_compare.format(ID), "func", tag,
-                        "sct_register_multimodal",
-                        f"sub-{ID}_{tag}*_bold_moco_mean_coreg_in_PAM50.nii.gz"))
-                    if not epi_cands:
-                        continue
-                    epi_vals = nib.load(sorted(epi_cands)[-1]).get_fdata()[pam50_mask_data]
-                    valid = np.isfinite(epi_vals) & np.isfinite(t2_vals) & (epi_vals > 0)
-                    if valid.sum() < 10:
-                        continue
-                    mi_records.append({"subject": ID, "task": task, "acq": acq_name,
-                                       "mi": _compute_mi(epi_vals[valid], t2_vals[valid])})
-        mi_df = pd.DataFrame(mi_records)
-        mi_df.to_csv(mi_csv, index=False)
-        print(f"Saved: {mi_csv}", flush=True)
+    mi_records = []
+    for ID in IDs:
+        for task in ["rest"]:
+            for acq_name in ALL_ACQS:
+                tag = f"task-{task}_acq-{acq_name}"
+                tag_dir = os.path.join(preprocessing_dir_compare.format(ID), "func", tag)
+
+                t2star_epi = _t2star_in_epi(ID, tag)
+                if t2star_epi is None:
+                    continue
+
+                epi_moco_cands = glob.glob(os.path.join(tag_dir, "sct_fmri_moco",
+                                                         f"sub-{ID}_{tag}*_bold_moco_mean.nii.gz"))
+                epi_seg_cands  = (glob.glob(os.path.join(tag_dir, f"sub-{ID}_{tag}*_bold_moco_mean_seg.nii.gz")) or
+                                  glob.glob(os.path.join(tag_dir, "sct_deepseg",
+                                                         f"sub-{ID}_{tag}*_bold_moco_mean_seg.nii.gz")))
+                if not epi_moco_cands or not epi_seg_cands:
+                    continue
+
+                epi_mean = sorted(epi_moco_cands)[-1]
+                epi_seg  = sorted(epi_seg_cands)[0]
+                epi_mask = nib.load(epi_seg).get_fdata() > 0
+                if epi_mask.sum() < 10:
+                    continue
+
+                t2_vals  = nib.load(t2star_epi).get_fdata()[epi_mask]
+                epi_vals = nib.load(epi_mean).get_fdata()[epi_mask]
+                valid = np.isfinite(epi_vals) & np.isfinite(t2_vals) & (epi_vals > 0) & (t2_vals > 0)
+                if valid.sum() < 10:
+                    continue
+                mi_records.append({"subject": ID, "task": task, "acq": acq_name,
+                                   "mi": _compute_mi(epi_vals[valid], t2_vals[valid])})
+    mi_df = pd.DataFrame(mi_records)
+    mi_df.to_csv(mi_csv, index=False)
+    print(f"Saved: {mi_csv}", flush=True)
 else:
-    mi_df = pd.read_csv(mi_csv)
+    try:
+        mi_df = pd.read_csv(mi_csv)
+    except pd.errors.EmptyDataError:
+        mi_df = pd.DataFrame()
 
 # --- 7d. tSNR triplet figures ---
 for task in df_tsnr["task"].unique():
     df_task = df_tsnr[df_tsnr["task"] == task]
     for acq1, acq2, acq3, shim_label in SHIM_TRIPLETS:
-        fig_path = os.path.join(fig_dir_compare, f"tsnr_sc_{shim_label}_{task}_triplet.png")
+        fig_path = os.path.join(output_fig_preprocessing, f"tsnr_sc_{shim_label}_{task}_triplet.png")
         if os.path.exists(fig_path) and not redo:
             print(f"Figure already exists: {fig_path}", flush=True)
             continue
@@ -586,7 +627,7 @@ if not bold_df.empty:
         for task in bold_df["task"].unique():
             bdf_task = bold_df[bold_df["task"] == task]
             for acq1, acq2, acq3, shim_label in SHIM_TRIPLETS:
-                fig_path = os.path.join(fig_dir_compare, f"{metric}_{shim_label}_{task}_triplet.png")
+                fig_path = os.path.join(output_fig_preprocessing, f"{metric}_{shim_label}_{task}_triplet.png")
                 if os.path.exists(fig_path) and not redo:
                     print(f"Figure already exists: {fig_path}", flush=True)
                     continue
@@ -608,12 +649,12 @@ if not bold_df.empty:
 
 # --- 7f. MI 4-condition figure ---
 MI_4COND = [
-    ("shimBase+3mm",      "rest", 0,    "#2166AC", "shimBase\n3mm"),
-    ("shimSlice+3mm",     "rest", 1,    "#74ADD1", "shimSlice\n3mm"),
-    ("shimBase+1mm+sms2", "rest", 2.5,  "#D73027", "shimBase\n1mm"),
-    ("shimSlice+1mm+sms2","rest", 3.5,  "#F4A582", "shimSlice\n1mm"),
+    ("shimBase+3mm",               "rest", 0,    "#2166AC", "shimBase\n3mm"),
+    ("shimSlice+3mm",              "rest", 1,    "#74ADD1", "shimSlice\n3mm"),
+    ("shimBase+1mm+sms2+avg3mm",   "rest", 2.5,  "#D73027", "shimBase\n1mm\n(avg3mm)"),
+    ("shimSlice+1mm+sms2+avg3mm",  "rest", 3.5,  "#F4A582", "shimSlice\n1mm\n(avg3mm)"),
 ]
-fig_path_4 = os.path.join(fig_dir_compare, "mi_t2star_4cond.png")
+fig_path_4 = os.path.join(output_fig_preprocessing, "mi_t2star_4cond.png")
 if not mi_df.empty and (not os.path.exists(fig_path_4) or redo):
     try:
         mi_ser = {c[0]: mi_df[(mi_df["task"] == c[1]) & (mi_df["acq"] == c[0])].set_index("subject")["mi"]
@@ -654,7 +695,7 @@ if not mi_df.empty and (not os.path.exists(fig_path_4) or redo):
                 _, _, ps = wilcoxon_str(mi_ser[a].loc[common].values, mi_ser[b].loc[common].values)
                 draw_bracket(ax, bx1, bx2, by, ps, fontsize=8)
         ax.set_xticks(xpos_list); ax.set_xticklabels(label_list, fontsize=8.5)
-        ax.set_ylabel("Mutual Information with T2*w GRE\n(PAM50 space, within SC mask)", fontsize=9)
+        ax.set_ylabel("Mutual Information with T2*w GRE\n(native EPI space, within SC mask)", fontsize=9)
         ax.set_title("MI with T2*w: shimBase vs shimSlice\n(3mm and 1mm acquisitions)", fontsize=9)
         ax.set_xlim(-0.6, 4.1)
         ax.spines["top"].set_visible(False); ax.spines["right"].set_visible(False)
@@ -662,6 +703,79 @@ if not mi_df.empty and (not os.path.exists(fig_path_4) or redo):
         print(f"Saved: {fig_path_4}", flush=True)
     except Exception as e:
         print(f"WARNING: MI 4-condition figure failed: {e}", flush=True)
+
+# --- 7g. tSNR / sSNR 4-condition figures (matching MI style) ---
+SNRPLOT_4COND = [
+    ("shimBase+3mm",                  "rest", 0,    "#2166AC", "shimBase\n3mm"),
+    ("shimSlice+3mm",                 "rest", 1,    "#74ADD1", "shimSlice\n3mm"),
+    ("shimBase+1mm+sms2+smooth3mm",   "rest", 2.5,  "#D73027", "shimBase\n1mm\n(smooth3mm)"),
+    ("shimSlice+1mm+sms2+smooth3mm",  "rest", 3.5,  "#F4A582", "shimSlice\n1mm\n(smooth3mm)"),
+]
+for snr_metric, col_name, ylabel in [
+    ("tSNR", "tsnr_sc", "Mean tSNR within SC mask"),
+    ("sSNR", "ssnr_sc", "Mean sSNR within SC mask"),
+]:
+    fig_path = os.path.join(output_fig_preprocessing, f"{len(IDs)}_{snr_metric.lower()}_4cond.png")
+    if df_tsnr.empty or col_name not in df_tsnr.columns:
+        print(f"INFO: No {col_name} data, skipping {snr_metric} 4-condition plot.", flush=True)
+        continue
+    if os.path.exists(fig_path) and not redo:
+        print(f"Figure already exists: {fig_path}", flush=True)
+        continue
+    try:
+        snr_ser = {c[0]: df_tsnr[(df_tsnr["task"] == c[1]) & (df_tsnr["acq"] == c[0])
+                                 ].set_index("subject")[col_name].dropna()
+                   for c in SNRPLOT_4COND}
+        base3_acq, slice3_acq = SNRPLOT_4COND[0][0], SNRPLOT_4COND[1][0]
+        base1_acq, slice1_acq = SNRPLOT_4COND[2][0], SNRPLOT_4COND[3][0]
+        common_3mm       = snr_ser[base3_acq].index.intersection(snr_ser[slice3_acq].index)
+        common_1mm       = snr_ser[base1_acq].index.intersection(snr_ser[slice1_acq].index)
+        common_slice_res = snr_ser[slice3_acq].index.intersection(snr_ser[slice1_acq].index)
+
+        xpos_list  = [c[2] for c in SNRPLOT_4COND]
+        color_list = [c[3] for c in SNRPLOT_4COND]
+        label_list = [c[4] for c in SNRPLOT_4COND]
+        vals_all   = [snr_ser[c[0]].values for c in SNRPLOT_4COND]
+
+        if all(v.size == 0 for v in vals_all):
+            print(f"INFO: No {snr_metric} values found, skipping.", flush=True)
+            continue
+
+        fig, ax = plt.subplots(figsize=(5.5, 4.5))
+        bp = ax.boxplot(vals_all, positions=xpos_list, widths=0.45, patch_artist=True,
+                        showfliers=False, medianprops=dict(color="white", linewidth=2))
+        for patch, col in zip(bp["boxes"], color_list):
+            patch.set_facecolor(col); patch.set_alpha(0.5)
+        for i, (wh, ca) in enumerate(zip(bp["whiskers"], bp["caps"])):
+            wh.set_color(color_list[i // 2]); wh.set_alpha(0.6)
+            ca.set_color(color_list[i // 2]); ca.set_alpha(0.6)
+        for sub in common_3mm:
+            ax.plot([0, 1], [snr_ser[base3_acq][sub], snr_ser[slice3_acq][sub]],
+                    "o-", color="dimgray", alpha=0.5, linewidth=1, markersize=4, zorder=3)
+        for sub in common_1mm:
+            ax.plot([2.5, 3.5], [snr_ser[base1_acq][sub], snr_ser[slice1_acq][sub]],
+                    "o-", color="dimgray", alpha=0.5, linewidth=1, markersize=4, zorder=3)
+        ax.set_ylim(bottom=0)
+        y_max = max(v.max() for v in vals_all if v.size > 0) * 1.50
+        ax.set_ylim(top=y_max)
+        bracket_inner_y, bracket_outer_y = y_max * 0.83, y_max * 0.96
+        for (a, b, common), (bx1, bx2), by in [
+            ((base3_acq,  slice3_acq, common_3mm),       (0,   1),   bracket_inner_y),
+            ((base1_acq,  slice1_acq, common_1mm),       (2.5, 3.5), bracket_inner_y),
+            ((slice3_acq, slice1_acq, common_slice_res), (1,   3.5), bracket_outer_y),
+        ]:
+            if len(common) >= 2:
+                _, _, ps = wilcoxon_str(snr_ser[a].loc[common].values, snr_ser[b].loc[common].values)
+                draw_bracket(ax, bx1, bx2, by, ps, fontsize=8)
+        ax.set_xticks(xpos_list); ax.set_xticklabels(label_list, fontsize=8.5)
+        ax.set_ylabel(ylabel, fontsize=9)
+        ax.set_title(f"{snr_metric}: shimBase vs shimSlice\n(3mm and 1mm acquisitions, REST)", fontsize=9)
+        ax.set_xlim(-0.6, 4.1)
+        ax.spines["top"].set_visible(False); ax.spines["right"].set_visible(False)
+        fig.tight_layout(); fig.savefig(fig_path, dpi=150, bbox_inches="tight"); plt.close(fig)
+        print(f"Saved: {fig_path}", flush=True)
+    except Exception as e:
+        print(f"WARNING: {snr_metric} 4-condition figure failed: {e}", flush=True)
 
 print("", flush=True)
 print("=== figures_workflow done ===", flush=True)
