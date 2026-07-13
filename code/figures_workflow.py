@@ -47,8 +47,11 @@ figures = figures_module.Figures_main(config, IDs=IDs)
 # Directories
 first_level_dir  = os.path.join(config["raw_dir"], config["first_level"]["dir"])
 second_level_dir = os.path.join(config["raw_dir"], config["second_level"]["dir"])
-output_fig = os.path.join(config["raw_dir"], config["figures_dir"]["main_dir"], "second_level")
-os.makedirs(output_fig, exist_ok=True)
+output_fig_second_level = os.path.join(config["raw_dir"], config["figures_dir"]["main_dir"], "second_level")
+output_fig_first_level  = os.path.join(config["raw_dir"], config["figures_dir"]["main_dir"], "first_level")
+output_fig = output_fig_second_level  # kept for GLM/ICC figures
+os.makedirs(output_fig_second_level, exist_ok=True)
+os.makedirs(output_fig_first_level, exist_ok=True)
 
 print("=== figures_workflow Start ===", flush=True)
 print(f"Participants: {IDs}", flush=True)
@@ -138,10 +141,14 @@ for metric in ["tsnr", "ssnr"]:
         continue
     (ymin, ymax) = (6, 17) if metric == "tsnr" else (1.5, 4.5)
     y_label = "temporal SNR" if metric == "tsnr" else "spatial SNR"
+    df_box = pd.read_csv(csv_matches[0])
+    if df_box["IDs"].nunique() < 2:
+        print(f"INFO: Only {df_box['IDs'].nunique()} subject(s) — skipping {metric} boxplot.", flush=True)
+        continue
     try:
         figures.boxplots(
             csv_file=csv_matches[0],
-            output_fname=os.path.join(output_fig, f"{len(IDs)}_{metric}_boxplot.png"),
+            output_fname=os.path.join(output_fig_first_level, f"{len(IDs)}_{metric}_boxplot.png"),
             ymin=ymin, ymax=ymax, stats_file=stat_matches[0],
             specify_y_label=y_label,
             x_data="acq", x_order=["shimBase", "shimSlice"],
@@ -440,7 +447,7 @@ tsnr_csv = os.path.join(out_dir, "tsnr_sc_mask.csv")
 if not os.path.exists(tsnr_csv) or redo:
     records = []
     for ID in IDs:
-        for task in all_tasks:
+        for task in ["rest"]:
             for acq_name in ALL_ACQS:
                 tag = f"task-{task}_acq-{acq_name}"
                 if acq_name in DERIVED_ACQS:
@@ -554,7 +561,7 @@ def _t2star_in_epi(ID, tag):
 if not os.path.exists(mi_csv) or redo:
     mi_records = []
     for ID in IDs:
-        for task in all_tasks:
+        for task in ["rest"]:
             for acq_name in ALL_ACQS:
                 tag = f"task-{task}_acq-{acq_name}"
                 tag_dir = os.path.join(preprocessing_dir_compare.format(ID), "func", tag)
@@ -690,7 +697,7 @@ if not mi_df.empty and (not os.path.exists(fig_path_4) or redo):
                 _, _, ps = wilcoxon_str(mi_ser[a].loc[common].values, mi_ser[b].loc[common].values)
                 draw_bracket(ax, bx1, bx2, by, ps, fontsize=8)
         ax.set_xticks(xpos_list); ax.set_xticklabels(label_list, fontsize=8.5)
-        ax.set_ylabel("Mutual Information with T2*w GRE\n(PAM50 space, within SC mask)", fontsize=9)
+        ax.set_ylabel("Mutual Information with T2*w GRE\n(native EPI space, within SC mask)", fontsize=9)
         ax.set_title("MI with T2*w: shimBase vs shimSlice\n(3mm and 1mm acquisitions)", fontsize=9)
         ax.set_xlim(-0.6, 4.1)
         ax.spines["top"].set_visible(False); ax.spines["right"].set_visible(False)
