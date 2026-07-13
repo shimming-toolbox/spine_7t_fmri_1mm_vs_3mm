@@ -468,7 +468,10 @@ if not os.path.exists(tsnr_csv) or redo:
     pd.DataFrame(records).to_csv(tsnr_csv, index=False)
     print(f"Saved: {tsnr_csv}", flush=True)
 
-df_tsnr = pd.read_csv(tsnr_csv)
+try:
+    df_tsnr = pd.read_csv(tsnr_csv)
+except pd.errors.EmptyDataError:
+    df_tsnr = pd.DataFrame()
 
 # --- 7b. BOLD sensitivity ---
 bold_csv = os.path.join(out_dir, "bold_sensitivity.csv")
@@ -499,7 +502,10 @@ if not os.path.exists(bold_csv) or redo:
         bold_df.to_csv(bold_csv, index=False)
         print(f"Saved: {bold_csv}", flush=True)
 else:
-    bold_df = pd.read_csv(bold_csv)
+    try:
+        bold_df = pd.read_csv(bold_csv)
+    except pd.errors.EmptyDataError:
+        bold_df = pd.DataFrame()
 
 # --- 7c. MI with T2* GRE ---
 mi_csv   = os.path.join(out_dir, "mi_t2star.csv")
@@ -595,7 +601,10 @@ if not os.path.exists(mi_csv) or redo:
     mi_df.to_csv(mi_csv, index=False)
     print(f"Saved: {mi_csv}", flush=True)
 else:
-    mi_df = pd.read_csv(mi_csv)
+    try:
+        mi_df = pd.read_csv(mi_csv)
+    except pd.errors.EmptyDataError:
+        mi_df = pd.DataFrame()
 
 # --- 7d. tSNR triplet figures ---
 for task in df_tsnr["task"].unique():
