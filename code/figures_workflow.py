@@ -338,15 +338,15 @@ for icc_label, subdir in [
 
 
 # ------------------------------------------------------------------
-# 7. compare_1mm_3mm: extract metrics then generate figures
+# 7. metrics extraction + comparison figures
 # ------------------------------------------------------------------
 print("", flush=True)
-print("=== compare_1mm_3mm: metric extraction + figures ===", flush=True)
+print("=== metrics extraction + comparison figures ===", flush=True)
 
 from utils import compute_tsnr_map
 
-out_dir         = os.path.join(path_data, "derivatives", "processing", "compare_1mm_3mm")
-fig_dir_compare = os.path.join(path_data, "derivatives", "processing", "figures", "compare_1mm_3mm")
+out_dir         = os.path.join(path_data, "derivatives", "processing", "figures", "metrics")
+fig_dir_compare = os.path.join(path_data, "derivatives", "processing", "figures", "compare")
 preprocessing_dir_compare = os.path.join(path_data, config["preprocess_dir"]["main_dir"])
 tsnr_precomp_dir = os.path.join(path_data, config["first_level"]["dir"].format("snr", "").split("sub")[0])
 os.makedirs(out_dir, exist_ok=True)
