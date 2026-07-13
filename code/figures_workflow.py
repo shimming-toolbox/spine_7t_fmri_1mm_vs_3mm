@@ -495,9 +495,11 @@ else:
     bold_df = pd.read_csv(bold_csv)
 
 # --- 7c. MI with T2* GRE ---
-mi_csv  = os.path.join(out_dir, "mi_t2star.csv")
-mi_cache = os.path.join(out_dir, "t2star_pam50")
+mi_csv   = os.path.join(out_dir, "mi_t2star.csv")
+mi_cache = os.path.join(out_dir, "t2star_in_epi")
 os.makedirs(mi_cache, exist_ok=True)
+
+manual_dir_compare = os.path.join(path_data, config["manual_dir"])
 
 def _compute_mi(x, y, bins=MI_BINS):
     hist2d, _, _ = np.histogram2d(x, y, bins=bins)
@@ -507,50 +509,84 @@ def _compute_mi(x, y, bins=MI_BINS):
     mask = pxy > 0
     return float(np.sum(pxy[mask] * np.log(pxy[mask] / (px * py)[mask])))
 
-def _t2star_in_pam50(ID):
-    out_path = os.path.join(mi_cache, f"sub-{ID}_T2star_inPAM50.nii.gz")
+def _t2star_in_epi(ID, tag):
+    """Register T2*w -> EPI space using centermass on SC segs, return path to warped T2*w."""
+    tag_cache = os.path.join(mi_cache, f"sub-{ID}", tag)
+    out_path  = os.path.join(tag_cache, f"sub-{ID}_T2star_in_EPI.nii.gz")
     if os.path.exists(out_path) and not redo:
         return out_path
+
     t2star = os.path.join(path_data, f"sub-{ID}", "anat", f"sub-{ID}_T2star.nii.gz")
-    warp   = os.path.join(preprocessing_dir_compare.format(ID), "anat", "sct_register_to_template",
-                          f"sub-{ID}_from-anat_to-PAM50_mode-image_xfm.nii.gz")
-    template = os.path.join(path_code, "template", config["PAM50_t2"])
-    if not os.path.exists(t2star) or not os.path.exists(warp):
+    if not os.path.exists(t2star):
         return None
-    ret = os.system(f"sct_apply_transfo -i {t2star} -d {template} -w {warp} -o {out_path} -x spline")
-    return out_path if ret == 0 and os.path.exists(out_path) else None
+
+    # T2*w seg: prefer manual correction
+    manual_t2star_seg = os.path.join(manual_dir_compare, f"sub-{ID}", "anat", f"sub-{ID}_T2star_seg.nii.gz")
+    auto_t2star_seg   = os.path.join(preprocessing_dir_compare.format(ID), "anat", "sct_deepseg",
+                                     f"sub-{ID}_T2star_seg.nii.gz")
+    t2star_seg = manual_t2star_seg if os.path.exists(manual_t2star_seg) else auto_t2star_seg
+    if not os.path.exists(t2star_seg):
+        return None
+
+    tag_dir = os.path.join(preprocessing_dir_compare.format(ID), "func", tag)
+    epi_seg_cands = (glob.glob(os.path.join(tag_dir, f"sub-{ID}_{tag}*_bold_moco_mean_seg.nii.gz")) or
+                     glob.glob(os.path.join(tag_dir, "sct_deepseg", f"sub-{ID}_{tag}*_bold_moco_mean_seg.nii.gz")))
+    epi_moco_cands = glob.glob(os.path.join(tag_dir, "sct_fmri_moco", f"sub-{ID}_{tag}*_bold_moco_mean.nii.gz"))
+    if not epi_seg_cands or not epi_moco_cands:
+        return None
+    epi_seg  = sorted(epi_seg_cands)[0]
+    epi_mean = sorted(epi_moco_cands)[-1]
+
+    os.makedirs(tag_cache, exist_ok=True)
+    cmd = (f"sct_register_multimodal -i {t2star} -iseg {t2star_seg}"
+           f" -d {epi_mean} -dseg {epi_seg}"
+           f" -param step=1,type=seg,algo=centermass"
+           f" -ofolder {tag_cache} -x spline -v 0")
+    ret = os.system(cmd)
+    # sct_register_multimodal names output after the moving image basename
+    t2star_base = os.path.basename(t2star).replace(".nii.gz", "")
+    reg_out = os.path.join(tag_cache, f"{t2star_base}_reg.nii.gz")
+    if ret != 0 or not os.path.exists(reg_out):
+        return None
+    os.rename(reg_out, out_path)
+    return out_path
 
 if not os.path.exists(mi_csv) or redo:
-    if not os.path.exists(pam50_mask_path):
-        print(f"WARNING: PAM50 cord mask not found, skipping MI.", flush=True)
-        mi_df = pd.DataFrame()
-    else:
-        pam50_mask_data = nib.load(pam50_mask_path).get_fdata() > 0
-        mi_records = []
-        for ID in IDs:
-            t2star_pam50 = _t2star_in_pam50(ID)
-            if t2star_pam50 is None:
-                print(f"WARNING: Could not warp T2*w for sub-{ID}, skipping.", flush=True)
-                continue
-            t2_vals = nib.load(t2star_pam50).get_fdata()[pam50_mask_data]
-            for task in all_tasks:
-                for acq_name in ALL_ACQS:
-                    tag = f"task-{task}_acq-{acq_name}"
-                    epi_cands = glob.glob(os.path.join(
-                        preprocessing_dir_compare.format(ID), "func", tag,
-                        "sct_register_multimodal",
-                        f"sub-{ID}_{tag}*_bold_moco_mean_coreg_in_PAM50.nii.gz"))
-                    if not epi_cands:
-                        continue
-                    epi_vals = nib.load(sorted(epi_cands)[-1]).get_fdata()[pam50_mask_data]
-                    valid = np.isfinite(epi_vals) & np.isfinite(t2_vals) & (epi_vals > 0)
-                    if valid.sum() < 10:
-                        continue
-                    mi_records.append({"subject": ID, "task": task, "acq": acq_name,
-                                       "mi": _compute_mi(epi_vals[valid], t2_vals[valid])})
-        mi_df = pd.DataFrame(mi_records)
-        mi_df.to_csv(mi_csv, index=False)
-        print(f"Saved: {mi_csv}", flush=True)
+    mi_records = []
+    for ID in IDs:
+        for task in all_tasks:
+            for acq_name in ALL_ACQS:
+                tag = f"task-{task}_acq-{acq_name}"
+                tag_dir = os.path.join(preprocessing_dir_compare.format(ID), "func", tag)
+
+                t2star_epi = _t2star_in_epi(ID, tag)
+                if t2star_epi is None:
+                    continue
+
+                epi_moco_cands = glob.glob(os.path.join(tag_dir, "sct_fmri_moco",
+                                                         f"sub-{ID}_{tag}*_bold_moco_mean.nii.gz"))
+                epi_seg_cands  = (glob.glob(os.path.join(tag_dir, f"sub-{ID}_{tag}*_bold_moco_mean_seg.nii.gz")) or
+                                  glob.glob(os.path.join(tag_dir, "sct_deepseg",
+                                                         f"sub-{ID}_{tag}*_bold_moco_mean_seg.nii.gz")))
+                if not epi_moco_cands or not epi_seg_cands:
+                    continue
+
+                epi_mean = sorted(epi_moco_cands)[-1]
+                epi_seg  = sorted(epi_seg_cands)[0]
+                epi_mask = nib.load(epi_seg).get_fdata() > 0
+                if epi_mask.sum() < 10:
+                    continue
+
+                t2_vals  = nib.load(t2star_epi).get_fdata()[epi_mask]
+                epi_vals = nib.load(epi_mean).get_fdata()[epi_mask]
+                valid = np.isfinite(epi_vals) & np.isfinite(t2_vals) & (epi_vals > 0) & (t2_vals > 0)
+                if valid.sum() < 10:
+                    continue
+                mi_records.append({"subject": ID, "task": task, "acq": acq_name,
+                                   "mi": _compute_mi(epi_vals[valid], t2_vals[valid])})
+    mi_df = pd.DataFrame(mi_records)
+    mi_df.to_csv(mi_csv, index=False)
+    print(f"Saved: {mi_csv}", flush=True)
 else:
     mi_df = pd.read_csv(mi_csv)
 
