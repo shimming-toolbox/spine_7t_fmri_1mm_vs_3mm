@@ -262,13 +262,16 @@ print("", flush=True)
 print("=== GLM uncorrected group maps (vox p<0.05) ===", flush=True)
 try:
     vox_thr_unc = 0.05
-    raw_perm_dir = os.path.join(second_level_dir.format("glm"), f"vox{vox_thr_unc}_perm10000")
+    # Use glob to find whichever perm* directory was computed (e.g. perm1000 or perm10000)
+    raw_perm_dirs = glob.glob(os.path.join(second_level_dir.format("glm"), f"vox{vox_thr_unc}_perm*"))
     i_fnames_unc = []
-    for acq_name in config["design_exp"]["acq_names"]:
-        tag_unc = "task-motor_acq-" + acq_name
-        nii_cands_unc = glob.glob(os.path.join(raw_perm_dir, tag_unc, f"*_{tag_unc}_t.nii.gz"))
-        if nii_cands_unc:
-            i_fnames_unc.append(nii_cands_unc[0])
+    if raw_perm_dirs:
+        raw_perm_dir = raw_perm_dirs[0]
+        for acq_name in config["design_exp"]["acq_names"]:
+            tag_unc = "task-motor_acq-" + acq_name
+            nii_cands_unc = glob.glob(os.path.join(raw_perm_dir, tag_unc, f"*_{tag_unc}_t.nii.gz"))
+            if nii_cands_unc:
+                i_fnames_unc.append(nii_cands_unc[0])
     if i_fnames_unc:
         z_slices_unc = [280, 266, 256, 243, 225]
         figures.plot_fmri_maps(
@@ -285,7 +288,7 @@ try:
             underlay_fname=os.path.join(path_code, "template", config["PAM50_gm"]),
             z_slices=z_slices_unc, n_slices=len(z_slices_unc), redo=redo)
     else:
-        print(f"INFO: No uncorrected GLM maps in {raw_perm_dir} — re-run --secondlevel first.", flush=True)
+        print(f"INFO: No vox{vox_thr_unc} uncorrected GLM maps found — skipping.", flush=True)
 except Exception as e:
     print(f"WARNING: GLM uncorrected group maps failed: {e}", flush=True)
 
