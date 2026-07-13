@@ -276,6 +276,14 @@ def epi_derive_seg_from_rest(ID, rest_tag, func_file, tag, params_moco, o_dir, r
               f" -d {pam50_t2_reg} -qc {preprocess_Sc.qc_dir} -qc-subject sub-{ID}"
               f" -qc-contrast {tag} -v 0")
     os.system(cmd_qc)
+
+    # Warp MOTOR moco mean into PAM50 space — used by MI computation in figures_workflow.
+    moco_mean_base = os.path.basename(moco_mean_f).replace(".nii.gz", "")
+    coreg_in_pam50 = os.path.join(func2pam50_dir, f"{moco_mean_base}_coreg_in_PAM50.nii.gz")
+    if not os.path.exists(coreg_in_pam50) or redo:
+        cmd = (f"sct_apply_transfo -i {moco_mean_f} -d {pam50_t2}"
+               f" -w {motor_to_pam50} -o {coreg_in_pam50} -x spline -v 0")
+        os.system(cmd)
     print(f'=== PAM50 registration (MOTOR, warp composition): Done  {ID} {tag} {run_name} ===', flush=True)
 
 
@@ -393,6 +401,19 @@ def epi_smooth_slices_processing(ID, source_tag, tag, smooth_width, redo, verbos
 
         # Copy PAM50 warp fields from the 1mm source: z-smoothing does not change geometry.
         copy_warping_fields_from_ref_tag(ID, tag, source_tag, preprocessing_dir)
+
+        # Warp smooth3mm moco mean into PAM50 space — used by MI computation in figures_workflow.
+        pam50_t2 = os.path.join(preprocess_Sc.code_dir, "template", preprocess_Sc.config["PAM50_t2"])
+        func_to_pam50 = os.path.join(preprocessing_dir.format(ID), "func", tag,
+                                     f"sub-{ID}_{tag}_from-func_to_PAM50_mode-image_xfm.nii.gz")
+        coreg_dir = os.path.join(preprocessing_dir.format(ID), "func", tag, "sct_register_multimodal")
+        os.makedirs(coreg_dir, exist_ok=True)
+        moco_mean_base = os.path.basename(moco_mean_f).replace(".nii.gz", "")
+        coreg_in_pam50 = os.path.join(coreg_dir, f"{moco_mean_base}_coreg_in_PAM50.nii.gz")
+        if not os.path.exists(coreg_in_pam50) or redo:
+            cmd = (f"sct_apply_transfo -i {moco_mean_f} -d {pam50_t2}"
+                   f" -w {func_to_pam50} -o {coreg_in_pam50} -x spline -v 0")
+            os.system(cmd)
 
 #------------------------------------------------------------------
 #------ Preprocessing
