@@ -608,10 +608,10 @@ if not bold_df.empty:
 
 # --- 7f. MI 4-condition figure ---
 MI_4COND = [
-    ("shimBase+3mm",                 "rest",  0,    "#2166AC", "shimBase\n3mm"),
-    ("shimSlice+3mm",                "motor", 1,    "#74ADD1", "shimSlice\n3mm"),
-    ("shimBase+1mm+sms2",            "rest",  2.5,  "#D73027", "shimBase\n1mm"),
-    ("shimSlice+1mm+sms2+smooth3mm", "motor", 3.5,  "#F4A582", "shimSlice\n1mm"),
+    ("shimBase+3mm",                "rest", 0,    "#2166AC", "shimBase\n3mm"),
+    ("shimSlice+3mm",               "rest", 1,    "#74ADD1", "shimSlice\n3mm"),
+    ("shimBase+1mm+sms2",           "rest", 2.5,  "#D73027", "shimBase\n1mm"),
+    ("shimSlice+1mm+sms2+smooth3mm","rest", 3.5,  "#F4A582", "shimSlice\n1mm"),
 ]
 fig_path_4 = os.path.join(fig_dir_compare, "mi_t2star_4cond.png")
 if not mi_df.empty and (not os.path.exists(fig_path_4) or redo):
