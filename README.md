@@ -143,8 +143,9 @@ Runs `preprocessing_workflow.py`. For each subject and acquisition:
 1. Compute temporal mean
 2. Detect centerline on mean → build moco mask
 3. Motion-correct time series (`sct_fmri_moco`)
-4. Segment cord on moco mean (`sct_deepseg`)
-5. Register PAM50 → REST moco mean (`sct_register_multimodal` via `coreg_img2PAM50`, initwarp = T2w PAM50 warp)
+4. **SMS acquisitions only (`+sms2`)**: correct even/odd slice AP jitter caused by the SMS slice-ordering scheme (`destripe_slices_img`, using `moco_params_y`); recompute moco mean from the destriped 4D volume → `*_moco_destriped.nii.gz`
+5. Segment cord on moco mean (`sct_deepseg`) — uses destriped mean for SMS acquisitions
+6. Register PAM50 → REST moco mean (`sct_register_multimodal` via `coreg_img2PAM50`, initwarp = T2w PAM50 warp)
 
 REST is always processed first so MOTOR can borrow from it.
 
@@ -161,7 +162,7 @@ If no matching REST exists for this acquisition, falls back to full independent 
 **Derived — `+avg3mm`** (slice-averaged, REST only)
 
 The 1mm data is resampled to simulate 3mm z-resolution by averaging groups of slices:
-1. Average every 3 slices of the 1mm moco time series along z
+1. Average every 3 slices of the already-destriped 1mm moco time series along z (`*_moco_destriped.nii.gz`)
 2. Copy segmentation from the 1mm source
 
 No PAM50 registration needed — `+avg3mm` is only used for native-space EPI comparison figures.
@@ -169,7 +170,7 @@ No PAM50 registration needed — `+avg3mm` is only used for native-space EPI com
 **Derived — `+smooth3mm`** (z-smoothed, REST and MOTOR)
 
 The 1mm data is z-smoothed with a Gaussian kernel to match the 3mm point spread function:
-1. Smooth the 1mm moco time series along z
+1. Smooth the already-destriped 1mm moco time series along z (`*_moco_destriped.nii.gz`)
 2. Copy segmentation from the 1mm source
 3. Copy PAM50 warp fields from the 1mm source — the smoothing does not change the geometry, so the 1mm registration is equally valid
 
