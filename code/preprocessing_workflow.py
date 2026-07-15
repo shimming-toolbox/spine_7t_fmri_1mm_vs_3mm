@@ -131,6 +131,24 @@ def epi_full_processing(ID, func_file, tag, manual_centerline, warpT2w_PAM50_fil
     print(f'=== Moco : Done  {ID} {tag} {run_name} ===', flush=True)
 
     # ------------------------------------------------------------------
+    # ------ Destripe (correct even/odd slice AP jitter from SMS)
+    # ------------------------------------------------------------------
+    if "sms" in tag.lower():
+        moco_dir = os.path.dirname(moco_f)
+        run_tag = f"_{run_name}" if run_name else ""
+        moco_params_y_f = os.path.join(moco_dir, f"moco_params_y_{tag}{run_tag}.nii.gz")
+        if os.path.exists(moco_params_y_f):
+            destriped_f = moco_f.replace("_moco.nii.gz", "_moco_destriped.nii.gz")
+            need_new_mean = not os.path.exists(destriped_f) or redo
+            destriped_f = utils.destripe_slices_img(i_img=moco_f, moco_params_img=moco_params_y_f,
+                                                     o_img=destriped_f, redo=redo, verbose=verbose)
+            if need_new_mean:
+                moco_mean_f = utils.tmean_img(ID=ID, i_img=destriped_f, o_img=moco_mean_f, redo=True, verbose=verbose)
+            print(f'=== Destripe : Done  {ID} {tag} {run_name} ===', flush=True)
+        else:
+            print(f'WARNING: moco_params_y not found for {tag}, skipping destripe.', flush=True)
+
+    # ------------------------------------------------------------------
     # ------ Run func cord segmentation
     # ------------------------------------------------------------------
     seg_func_sc_file = preprocess_Sc.segmentation(ID=ID,
@@ -314,21 +332,19 @@ def epi_avg_slices_moco(ID, source_tag, tag, n_slices_avg, redo, verbose):
     moco_dir = os.path.join(preprocessing_dir.format(ID), "func", tag, "sct_fmri_moco")
     os.makedirs(moco_dir, exist_ok=True)
 
-    source_moco_files = sorted(glob.glob(os.path.join(source_moco_dir, f"sub-{ID}_{source_tag}_*bold_moco.nii.gz")))
+    # Prefer already-destriped source (produced by epi_full_processing for sms acqs)
+    source_moco_files = (sorted(glob.glob(os.path.join(source_moco_dir, f"sub-{ID}_{source_tag}_*bold_moco_destriped.nii.gz"))) or
+                         sorted(glob.glob(os.path.join(source_moco_dir, f"sub-{ID}_{source_tag}_*bold_moco.nii.gz"))))
 
     outputs = []
     for source_moco_f in source_moco_files:
         match = re.search(r"_?(run-\d+)", source_moco_f)
         run_name = match.group(1) if match else ""
-        run_tag = f"_{run_name}" if run_name else ""
 
-        # De-jitter the per-slice AP offset (see issue #8) before averaging
-        moco_params_y_f = os.path.join(source_moco_dir, f"moco_params_y_{source_tag}{run_tag}.nii.gz")
-        destriped_f = os.path.join(moco_dir, os.path.basename(source_moco_f).replace(source_tag, tag).replace("_moco.nii.gz", "_moco_destriped.nii.gz"))
-        destriped_f = utils.destripe_slices_img(i_img=source_moco_f, moco_params_img=moco_params_y_f, o_img=destriped_f, redo=redo, verbose=verbose)
-
-        moco_f = os.path.join(moco_dir, os.path.basename(source_moco_f).replace(source_tag, tag))
-        moco_f = utils.average_slices_img(i_img=destriped_f, o_img=moco_f, n_slices_avg=n_slices_avg, redo=redo, verbose=verbose)
+        moco_f = os.path.join(moco_dir, os.path.basename(source_moco_f)
+                              .replace(source_tag, tag)
+                              .replace("_moco_destriped.nii.gz", "_moco.nii.gz"))
+        moco_f = utils.average_slices_img(i_img=source_moco_f, o_img=moco_f, n_slices_avg=n_slices_avg, redo=redo, verbose=verbose)
 
         moco_mean_f = os.path.join(moco_dir, os.path.basename(moco_f).split(".")[0] + "_mean.nii.gz")
         moco_mean_f = utils.tmean_img(ID=ID, i_img=moco_f, o_img=moco_mean_f, redo=redo, verbose=verbose)
@@ -364,21 +380,19 @@ def epi_smooth_slices_moco(ID, source_tag, tag, smooth_width, redo, verbose):
     moco_dir = os.path.join(preprocessing_dir.format(ID), "func", tag, "sct_fmri_moco")
     os.makedirs(moco_dir, exist_ok=True)
 
-    source_moco_files = sorted(glob.glob(os.path.join(source_moco_dir, f"sub-{ID}_{source_tag}_*bold_moco.nii.gz")))
+    # Prefer already-destriped source (produced by epi_full_processing for sms acqs)
+    source_moco_files = (sorted(glob.glob(os.path.join(source_moco_dir, f"sub-{ID}_{source_tag}_*bold_moco_destriped.nii.gz"))) or
+                         sorted(glob.glob(os.path.join(source_moco_dir, f"sub-{ID}_{source_tag}_*bold_moco.nii.gz"))))
 
     outputs = []
     for source_moco_f in source_moco_files:
         match = re.search(r"_?(run-\d+)", source_moco_f)
         run_name = match.group(1) if match else ""
-        run_tag = f"_{run_name}" if run_name else ""
 
-        # De-jitter the per-slice AP offset (see issue #8) before smoothing
-        moco_params_y_f = os.path.join(source_moco_dir, f"moco_params_y_{source_tag}{run_tag}.nii.gz")
-        destriped_f = os.path.join(moco_dir, os.path.basename(source_moco_f).replace(source_tag, tag).replace("_moco.nii.gz", "_moco_destriped.nii.gz"))
-        destriped_f = utils.destripe_slices_img(i_img=source_moco_f, moco_params_img=moco_params_y_f, o_img=destriped_f, redo=redo, verbose=verbose)
-
-        moco_f = os.path.join(moco_dir, os.path.basename(source_moco_f).replace(source_tag, tag))
-        moco_f = utils.smooth_slices_img(i_img=destriped_f, o_img=moco_f, smooth_width=smooth_width, redo=redo, verbose=verbose)
+        moco_f = os.path.join(moco_dir, os.path.basename(source_moco_f)
+                              .replace(source_tag, tag)
+                              .replace("_moco_destriped.nii.gz", "_moco.nii.gz"))
+        moco_f = utils.smooth_slices_img(i_img=source_moco_f, o_img=moco_f, smooth_width=smooth_width, redo=redo, verbose=verbose)
 
         moco_mean_f = os.path.join(moco_dir, os.path.basename(moco_f).split(".")[0] + "_mean.nii.gz")
         moco_mean_f = utils.tmean_img(ID=ID, i_img=moco_f, o_img=moco_mean_f, redo=redo, verbose=verbose)
