@@ -13,7 +13,7 @@
 #
 # Usage:
 #   python generate_slicercart_cohort.py --path-data /path/to/ds007932_260612 \
-#       --output /path/to/ds007932_260612/cohort.csv [--ids 099 100]
+#       --output /path/to/ds007932_260612/cohort.csv [--ids 099 100] [--exclude task-motor]
 
 import argparse
 import glob
@@ -23,6 +23,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--path-data", required=True, help="Path to the dataset root (e.g. .../ds007932_260612)")
 parser.add_argument("--output", required=True, help="Path to the cohort CSV to create")
 parser.add_argument("--ids", nargs="+", default=[""], help="Subject IDs to include (default: all)")
+parser.add_argument("--exclude", nargs="+", default=[], help="Skip pairs whose image path contains any of these strings (e.g. task-motor)")
 args = parser.parse_args()
 
 path_data = os.path.abspath(args.path_data)
@@ -32,10 +33,11 @@ if not os.path.isdir(preprocessing_dir):
     raise FileNotFoundError(f"Preprocessing directory not found: {preprocessing_dir}")
 
 
-def find_image_seg_pairs(preprocessing_dir, ids):
+def find_image_seg_pairs(preprocessing_dir, ids, exclude):
     """Pair each sct_deepseg/*_seg.nii.gz with its source image (same basename, minus '_seg')."""
     seg_pattern = os.path.join(preprocessing_dir, "sub-*", "**", "sct_deepseg", "*_seg.nii.gz")
     segs = sorted(glob.glob(seg_pattern, recursive=True))
+    segs = [s for s in segs if not any(x in s for x in exclude)]
 
     # Index all candidate images (any .nii.gz that isn't itself a "_seg" file) by basename stem.
     image_pattern = os.path.join(preprocessing_dir, "sub-*", "**", "*.nii.gz")
@@ -66,7 +68,7 @@ def find_image_seg_pairs(preprocessing_dir, ids):
     return pairs
 
 
-pairs = find_image_seg_pairs(preprocessing_dir, args.ids)
+pairs = find_image_seg_pairs(preprocessing_dir, args.ids, args.exclude)
 pairs.sort(key=lambda p: p[0])
 print(f"Found {len(pairs)} image/segmentation pairs.")
 
