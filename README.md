@@ -218,6 +218,8 @@ After saving any corrected file, re-run preprocessing with `--redo` so that down
 
 Unlike `export_manual_correction.py`, this does not copy any files — it just references the existing files in place.
 
+Alongside `cohort.csv`, it also writes a `cohort.json` sidecar (same basename, `.json` extension). This isn't optional: without it, slicer-cart silently resets its internal case/resource maps on load and the task cannot start (see [neuropoly/slicer-cart#201](https://github.com/neuropoly/slicer-cart/issues/201)). **Keep the `.json` file next to the `.csv` file** whenever you move, copy, or share the cohort.
+
 ```bash
 python "${PATH_CODE}/code/generate_slicercart_cohort.py" \
   --path-data "${PATH_DATA}" \
