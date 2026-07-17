@@ -211,6 +211,35 @@ After saving any corrected file, re-run preprocessing with `--redo` so that down
 
 </details>
 
+<details>
+<summary>Bulk export for spinalcordtoolbox/manual-correction</summary>
+
+The QC-driven workflow above works file-by-file. For reviewing/correcting many segmentations at once, use [spinalcordtoolbox/manual-correction](https://github.com/spinalcordtoolbox/manual-correction) instead — a dedicated GUI for batch QC and correction. It expects a flat BIDS-like layout, whereas this pipeline's outputs are nested deep inside `derivatives/processing/preprocessing/` (see [#55](https://github.com/shimming-toolbox/spine_7t_fmri_1mm_vs_3mm/issues/55)).
+
+`export_manual_correction.py` copies every segmented image and its `sct_deepseg` segmentation into that flat layout:
+
+```bash
+python "${PATH_CODE}/code/export_manual_correction.py" --path-data "${PATH_DATA}"
+```
+
+This creates:
+```
+${PATH_DATA}/derivatives/manual_correction/sub-<ID>/<anat|func>/<image>.nii.gz
+${PATH_DATA}/derivatives/manual_correction/derivatives/manual/sub-<ID>/<anat|func>/<image>_seg.nii.gz
+```
+
+which can be pointed to directly from `manual-correction`.
+
+| Flag | Description |
+|---|---|
+| `--ids` | Restrict export to specific subjects (default: all) |
+| `--redo` | Overwrite files already present in the output folder |
+| `--dry-run` | Print what would be copied without copying |
+
+After correcting segmentations in `manual-correction`, copy the corrected files into `derivatives/manual/` (see table above) and re-run preprocessing with `--redo`.
+
+</details>
+
 ---
 
 ### Step 2 — First-level analysis (`--firstlevel`)
