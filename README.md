@@ -225,10 +225,17 @@ python "${PATH_CODE}/code/export_manual_correction.py" --path-data "${PATH_DATA}
 This creates:
 ```
 ${PATH_DATA}/derivatives/manual_correction/sub-<ID>/<anat|func>/<image>.nii.gz
-${PATH_DATA}/derivatives/manual_correction/derivatives/manual/sub-<ID>/<anat|func>/<image>_seg.nii.gz
+${PATH_DATA}/derivatives/manual_correction/derivatives/sct_deepseg/sub-<ID>/<anat|func>/<image>_seg.nii.gz
 ```
 
-which can be pointed to directly from `manual-correction`.
+Since segmentations live in the nested `derivatives/sct_deepseg/` folder rather than alongside the images, pass `-path-label` explicitly when running `manual-correction`:
+
+```bash
+python manual_correction.py \
+  -path-img "${PATH_DATA}/derivatives/manual_correction" \
+  -path-label "${PATH_DATA}/derivatives/manual_correction/derivatives/sct_deepseg" \
+  -config <your_config.yml>
+```
 
 | Flag | Description |
 |---|---|

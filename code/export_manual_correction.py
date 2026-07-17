@@ -9,7 +9,7 @@
 # corresponding "_seg" segmentation into:
 #
 #   <path-data>/derivatives/manual_correction/sub-<ID>/<datatype>/<image>.nii.gz
-#   <path-data>/derivatives/manual_correction/derivatives/manual/sub-<ID>/<datatype>/<image>_seg.nii.gz
+#   <path-data>/derivatives/manual_correction/derivatives/sct_deepseg/sub-<ID>/<datatype>/<image>_seg.nii.gz
 #
 # Usage:
 #   python export_manual_correction.py --path-data /path/to/ds007932_260612 [--ids 099 100] [--redo] [--dry-run]
@@ -30,7 +30,7 @@ path_data = os.path.abspath(args.path_data)
 preprocessing_dir = os.path.join(path_data, "derivatives", "processing", "preprocessing")
 out_root = os.path.join(path_data, "derivatives", "manual_correction")
 out_images_dir = out_root
-out_labels_dir = os.path.join(out_root, "derivatives", "manual")
+out_labels_dir = os.path.join(out_root, "derivatives", "sct_deepseg")
 
 if not os.path.isdir(preprocessing_dir):
     raise FileNotFoundError(f"Preprocessing directory not found: {preprocessing_dir}")
