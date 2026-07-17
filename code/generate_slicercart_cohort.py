@@ -13,7 +13,7 @@
 #
 # Usage:
 #   python generate_slicercart_cohort.py --path-data /path/to/ds007932_260612 \
-#       --output /path/to/ds007932_260612/cohort.csv [--ids 099 100] [--exclude task-motor]
+#       --output /path/to/ds007932_260612/cohort.csv [--ids 099 100] [--exclude task-motor] [--no-seg]
 
 import argparse
 import glob
@@ -24,6 +24,7 @@ parser.add_argument("--path-data", required=True, help="Path to the dataset root
 parser.add_argument("--output", required=True, help="Path to the cohort CSV to create")
 parser.add_argument("--ids", nargs="+", default=[""], help="Subject IDs to include (default: all)")
 parser.add_argument("--exclude", nargs="+", default=[], help="Skip pairs whose image path contains any of these strings (e.g. task-motor)")
+parser.add_argument("--no-seg", action="store_true", help="Leave the segmentation column blank even if a sct_deepseg output exists, so slicer-cart starts from an empty mask")
 args = parser.parse_args()
 
 path_data = os.path.abspath(args.path_data)
@@ -77,7 +78,7 @@ with open(args.output, "w") as fp:
     fp.write("uid,image_volume_reference,seg_segmentation_editable\n")
     for uid, image_path, seg_path in pairs:
         image_rel = os.path.relpath(image_path, path_data)
-        seg_rel = os.path.relpath(seg_path, path_data)
+        seg_rel = "" if args.no_seg else os.path.relpath(seg_path, path_data)
         fp.write(f"{uid},{image_rel},{seg_rel}\n")
 
 print(f"Wrote cohort file: {args.output}")
