@@ -211,6 +211,55 @@ After saving any corrected file, re-run preprocessing with `--redo` so that down
 
 </details>
 
+<details>
+<summary>Generate a slicer-cart cohort (one row per image/segmentation pair)</summary>
+
+[slicer-cart](https://github.com/neuropoly/slicer-cart) has no way to review multiple segmentations for a single case one at a time — all resources for a row load into the viewer at once, which is too heavy for the ~6 segmentations/subject in this project (see [neuropoly/slicer-cart#200](https://github.com/neuropoly/slicer-cart/issues/200) and [#57](https://github.com/shimming-toolbox/spine_7t_fmri_1mm_vs_3mm/issues/57)). `generate_slicercart_cohort.py` works around this by writing one cohort row per image/segmentation pair instead of one row per subject, so slicer-cart can be used with a "correct one, save, next" workflow.
+
+Unlike `export_manual_correction.py`, this does not copy any files — it just references the existing files in place.
+
+Alongside `cohort.csv`, it also writes a `cohort.json` sidecar (same basename, `.json` extension). This isn't optional: without it, slicer-cart silently resets its internal case/resource maps on load and the task cannot start (see [neuropoly/slicer-cart#201](https://github.com/neuropoly/slicer-cart/issues/201)). **Keep the `.json` file next to the `.csv` file** whenever you move, copy, or share the cohort.
+
+```bash
+python "${PATH_CODE}/code/generate_slicercart_cohort.py" \
+  --path-data "${PATH_DATA}" \
+  --output cohort.csv \
+  --exclude task-motor \
+  --no-seg
+```
+
+| Flag | Description |
+|---|---|
+| `--ids` | Restrict to specific subjects (default: all) |
+| `--exclude` | Skip pairs whose path contains any of these strings (e.g. `task-motor`) |
+| `--no-seg` | Leave the segmentation column blank so slicer-cart starts from an empty mask, instead of loading the existing `sct_deepseg` output |
+
+Resulting `cohort.csv` (with `--exclude task-motor --no-seg`):
+```
+uid,image_volume_reference,seg_segmentation_editable
+sub-099_T2star,derivatives/processing/preprocessing/sub-099/anat/sub-099_T2star.nii.gz,
+sub-099_task-rest_acq-shimBase+3mm_bold_moco_mean,derivatives/processing/preprocessing/sub-099/func/task-rest_acq-shimBase+3mm/sct_fmri_moco/sub-099_task-rest_acq-shimBase+3mm_bold_moco_mean.nii.gz,
+sub-099_task-rest_acq-shimSlice+3mm_bold_moco_mean,derivatives/processing/preprocessing/sub-099/func/task-rest_acq-shimSlice+3mm/sct_fmri_moco/sub-099_task-rest_acq-shimSlice+3mm_bold_moco_mean.nii.gz,
+sub-100_T2star,derivatives/processing/preprocessing/sub-100/anat/sub-100_T2star.nii.gz,
+sub-100_task-rest_acq-shimBase+1mm+sms2_bold_moco_mean,derivatives/processing/preprocessing/sub-100/func/task-rest_acq-shimBase+1mm+sms2/sct_fmri_moco/sub-100_task-rest_acq-shimBase+1mm+sms2_bold_moco_mean.nii.gz,
+sub-100_task-rest_acq-shimBase+3mm_bold_moco_mean,derivatives/processing/preprocessing/sub-100/func/task-rest_acq-shimBase+3mm/sct_fmri_moco/sub-100_task-rest_acq-shimBase+3mm_bold_moco_mean.nii.gz,
+sub-100_task-rest_acq-shimSlice+1mm+sms2_bold_moco_mean,derivatives/processing/preprocessing/sub-100/func/task-rest_acq-shimSlice+1mm+sms2/sct_fmri_moco/sub-100_task-rest_acq-shimSlice+1mm+sms2_bold_moco_mean.nii.gz,
+sub-100_task-rest_acq-shimSlice+3mm_bold_moco_mean,derivatives/processing/preprocessing/sub-100/func/task-rest_acq-shimSlice+3mm/sct_fmri_moco/sub-100_task-rest_acq-shimSlice+3mm_bold_moco_mean.nii.gz,
+sub-101_T2star,derivatives/processing/preprocessing/sub-101/anat/sub-101_T2star.nii.gz,
+sub-101_task-rest_acq-shimBase+1mm+sms2_run-03_bold_moco_mean,derivatives/processing/preprocessing/sub-101/func/task-rest_acq-shimBase+1mm+sms2/sct_fmri_moco/sub-101_task-rest_acq-shimBase+1mm+sms2_run-03_bold_moco_mean.nii.gz,
+sub-101_task-rest_acq-shimBase+3mm_bold_moco_mean,derivatives/processing/preprocessing/sub-101/func/task-rest_acq-shimBase+3mm/sct_fmri_moco/sub-101_task-rest_acq-shimBase+3mm_bold_moco_mean.nii.gz,
+sub-101_task-rest_acq-shimSlice+3mm_bold_moco_mean,derivatives/processing/preprocessing/sub-101/func/task-rest_acq-shimSlice+3mm/sct_fmri_moco/sub-101_task-rest_acq-shimSlice+3mm_bold_moco_mean.nii.gz,
+sub-102_T2star,derivatives/processing/preprocessing/sub-102/anat/sub-102_T2star.nii.gz,
+sub-102_task-rest_acq-shimBase+1mm+sms2_bold_moco_mean,derivatives/processing/preprocessing/sub-102/func/task-rest_acq-shimBase+1mm+sms2/sct_fmri_moco/sub-102_task-rest_acq-shimBase+1mm+sms2_bold_moco_mean.nii.gz,
+sub-102_task-rest_acq-shimBase+3mm_bold_moco_mean,derivatives/processing/preprocessing/sub-102/func/task-rest_acq-shimBase+3mm/sct_fmri_moco/sub-102_task-rest_acq-shimBase+3mm_bold_moco_mean.nii.gz,
+sub-102_task-rest_acq-shimSlice+1mm+sms2_bold_moco_mean,derivatives/processing/preprocessing/sub-102/func/task-rest_acq-shimSlice+1mm+sms2/sct_fmri_moco/sub-102_task-rest_acq-shimSlice+1mm+sms2_bold_moco_mean.nii.gz,
+sub-102_task-rest_acq-shimSlice+3mm_bold_moco_mean,derivatives/processing/preprocessing/sub-102/func/task-rest_acq-shimSlice+3mm/sct_fmri_moco/sub-102_task-rest_acq-shimSlice+3mm_bold_moco_mean.nii.gz,
+```
+
+When opening the cohort in slicer-cart, set its data path to `${PATH_DATA}` — both columns are relative to that same root.
+
+</details>
+
 ---
 
 ### Step 2 — First-level analysis (`--firstlevel`)
