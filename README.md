@@ -192,7 +192,7 @@ bash "${PATH_CODE}/code/run_all_processing.sh" \
 ```
 
 <details>
-<summary>Manual corrections</summary>
+<summary>Quality Control (QC)</summary>
 
 After running preprocessing, open the QC report (`derivatives/processing/qc/index.html`) and go through the checks below in order. For each one, use the search box and/or the **Function** / **Contrast** filter buttons in the QC viewer to narrow the entries.
 
