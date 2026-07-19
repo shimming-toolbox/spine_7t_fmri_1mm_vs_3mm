@@ -97,6 +97,36 @@ manual_dir = os.path.join(config["raw_dir"], config["manual_dir"])
 
 
 
+def destripe_if_sms(ID, tag, moco_f, moco_mean_f, redo, verbose):
+    """
+    For SMS acquisitions (identified by "sms" in tag), correct the even/odd slice
+    AP jitter caused by the SMS slice-ordering scheme, and recompute the moco mean
+    from the destriped 4D volume. No-op (returns moco_mean_f unchanged) otherwise.
+
+    Used for both REST and MOTOR acquisitions: MOTOR is registered to REST
+    (see epi_derive_seg_from_rest), so MOTOR must be destriped too, or that
+    registration is degraded by residual jitter only present on one side.
+    """
+    if "sms" not in tag.lower():
+        return moco_mean_f
+
+    moco_dir = os.path.dirname(moco_f)
+    run_tag = f"_{run_name}" if run_name else ""
+    moco_params_y_f = os.path.join(moco_dir, f"moco_params_y_{tag}{run_tag}.nii.gz")
+    if not os.path.exists(moco_params_y_f):
+        print(f'WARNING: moco_params_y not found for {tag}, skipping destripe.', flush=True)
+        return moco_mean_f
+
+    destriped_f = moco_f.replace("_moco.nii.gz", "_moco_destriped.nii.gz")
+    need_new_mean = not os.path.exists(destriped_f) or redo
+    destriped_f = utils.destripe_slices_img(i_img=moco_f, moco_params_img=moco_params_y_f,
+                                             o_img=destriped_f, redo=redo, verbose=verbose)
+    if need_new_mean:
+        moco_mean_f = utils.tmean_img(ID=ID, i_img=destriped_f, o_img=moco_mean_f, redo=True, verbose=verbose)
+    print(f'=== Destripe : Done  {ID} {tag} {run_name} ===', flush=True)
+    return moco_mean_f
+
+
 def epi_full_processing(ID, func_file, tag, manual_centerline, warpT2w_PAM50_files, params_moco, o_dir, redo, verbose):
     # ------------------------------------------------------------------
     # ------ Create mask around the cord for moco
@@ -133,20 +163,7 @@ def epi_full_processing(ID, func_file, tag, manual_centerline, warpT2w_PAM50_fil
     # ------------------------------------------------------------------
     # ------ Destripe (correct even/odd slice AP jitter from SMS)
     # ------------------------------------------------------------------
-    if "sms" in tag.lower():
-        moco_dir = os.path.dirname(moco_f)
-        run_tag = f"_{run_name}" if run_name else ""
-        moco_params_y_f = os.path.join(moco_dir, f"moco_params_y_{tag}{run_tag}.nii.gz")
-        if os.path.exists(moco_params_y_f):
-            destriped_f = moco_f.replace("_moco.nii.gz", "_moco_destriped.nii.gz")
-            need_new_mean = not os.path.exists(destriped_f) or redo
-            destriped_f = utils.destripe_slices_img(i_img=moco_f, moco_params_img=moco_params_y_f,
-                                                     o_img=destriped_f, redo=redo, verbose=verbose)
-            if need_new_mean:
-                moco_mean_f = utils.tmean_img(ID=ID, i_img=destriped_f, o_img=moco_mean_f, redo=True, verbose=verbose)
-            print(f'=== Destripe : Done  {ID} {tag} {run_name} ===', flush=True)
-        else:
-            print(f'WARNING: moco_params_y not found for {tag}, skipping destripe.', flush=True)
+    moco_mean_f = destripe_if_sms(ID=ID, tag=tag, moco_f=moco_f, moco_mean_f=moco_mean_f, redo=redo, verbose=verbose)
 
     # ------------------------------------------------------------------
     # ------ Run func cord segmentation
@@ -205,6 +222,11 @@ def epi_derive_seg_from_rest(ID, rest_tag, func_file, tag, params_moco, o_dir, r
                                                       redo=redo,
                                                       use_dl=True)
     print(f'=== Moco : Done  {ID} {tag} {run_name} ===', flush=True)
+
+    # Destripe (correct even/odd slice AP jitter from SMS). MOTOR is registered to REST
+    # below, so it must be destriped too, same as REST, or the registration is degraded
+    # by residual jitter only present on the MOTOR side.
+    moco_mean_f = destripe_if_sms(ID=ID, tag=tag, moco_f=moco_f, moco_mean_f=moco_mean_f, redo=redo, verbose=verbose)
 
     # Locate REST mean-moco and segmentations
     rest_moco_mean_candidates = sorted(glob.glob(os.path.join(
