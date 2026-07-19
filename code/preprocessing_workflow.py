@@ -32,7 +32,7 @@ import pandas as pd
 # get path of the parent location of this file, and go up one level
 path_code = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(os.path.join(path_code, "code"))  # Change this line according to your directory
-from preprocess import Preprocess_main, Preprocess_Sc, copy_warping_fields_from_ref_tag, copy_segmentation_from_ref_tag
+from preprocess import Preprocess_main, Preprocess_Sc, copy_warping_fields_from_ref_tag, copy_segmentation_from_ref_tag, manual_label_filename
 import postprocess
 import utils
 
@@ -346,7 +346,7 @@ def _get_seg_file(ID, source_tag):
     """
     tag_dir = os.path.join(preprocessing_dir.format(ID), "func", source_tag)
     manual_files = glob.glob(os.path.join(manual_dir, f"sub-{ID}", "func",
-                                          f"sub-{ID}_{source_tag}_*bold_moco_mean_seg.nii.gz"))
+                                          f"sub-{ID}_{source_tag}_*bold_moco_mean_label-SC_seg.nii.gz"))
     auto_files = (glob.glob(os.path.join(tag_dir, "sct_deepseg",
                                          f"sub-{ID}_{source_tag}_*bold_moco_mean_seg.nii.gz")) or
                   glob.glob(os.path.join(tag_dir,
@@ -519,7 +519,7 @@ for ID_nb, ID in enumerate(IDs):
     #------ Registration in PAM50
     #------------------------------------------------------------------
 
-    manual_seg_file = os.path.join(f"{manual_dir}", f"sub-{ID}", "anat", os.path.basename(seg_anat_sc_file))
+    manual_seg_file = os.path.join(f"{manual_dir}", f"sub-{ID}", "anat", manual_label_filename(os.path.basename(seg_anat_sc_file), "SC"))
     seg_anat_sc_final_file = manual_seg_file if os.path.exists(manual_seg_file) else seg_anat_sc_file
     param = "step=1,type=seg,algo=centermassrot"
 
