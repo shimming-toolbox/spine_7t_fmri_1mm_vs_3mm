@@ -199,12 +199,12 @@ After running preprocessing, open the QC report (`derivatives/processing/qc/inde
 
 | # | What to inspect | How to find it in QC | Correction file (save under `derivatives/manual/`) |
 |---|---|---|---|
-| 1 | T2\*w anat cord segmentation | search `T2star_seg`, filter function `sct_deepseg` | `sub-<ID>/anat/<filename>_seg.nii.gz` |
-| 2 | Vertebral disc labels (totalspineseg) | search `totalspineseg`, filter function `sct_label_utils` (see [#45](https://github.com/shimming-toolbox/spine_7t_fmri_1mm_vs_3mm/issues/45), [#61](https://github.com/shimming-toolbox/spine_7t_fmri_1mm_vs_3mm/issues/61)) | `sub-<ID>/anat/<filename>_label-ivd_mask.nii.gz` |
+| 1 | T2\*w anat cord segmentation | search `T2star_seg`, filter function `sct_deepseg` | `sub-<ID>/anat/<filename>_label-SC_seg.nii.gz` |
+| 2 | Vertebral disc labels (totalspineseg) | search `totalspineseg`, filter function `sct_label_utils` (see [#45](https://github.com/shimming-toolbox/spine_7t_fmri_1mm_vs_3mm/issues/45), [#61](https://github.com/shimming-toolbox/spine_7t_fmri_1mm_vs_3mm/issues/61), [#63](https://github.com/shimming-toolbox/spine_7t_fmri_1mm_vs_3mm/issues/63)) | `sub-<ID>/anat/<filename>_label-discs_dlabel.nii.gz` |
 | 3 | Anat-to-template registration | search `register_to_template`, filter contrast to **Anat** only | re-run with corrected seg/labels from steps 1–2 |
 | 4 | Moco centerline (motion-correction mask) | search `_bold_tmean_centerline` | `sub-<ID>/func/<filename>_tmean_centerline.nii.gz` |
 | 5 | Motion correction (`sct_fmri_moco`) | filter function **sct_fmri_moco**, scroll through all entries | re-run moco with corrected centerline from step 4 |
-| 6 | Functional cord segmentation (**REST only** — MOTOR seg is derived from this; no CSF mask needed) | search `_bold_moco_mean_seg`, filter function `sct_deepseg` | `sub-<ID>/func/<filename>_bold_moco_mean_seg.nii.gz` |
+| 6 | Functional cord segmentation (**REST only** — MOTOR seg is derived from this; no CSF mask needed) | search `_bold_moco_mean_seg`, filter function `sct_deepseg` | `sub-<ID>/func/<filename>_bold_moco_mean_label-SC_seg.nii.gz` |
 | 7 | Rest-to-motor registration | search `sct_register_rest2motor` | re-run with corrected seg from step 6 |
 | 8 | EPI-to-template registration | search `PAM50_t2_reg` | re-run with corrected seg from step 6 |
 

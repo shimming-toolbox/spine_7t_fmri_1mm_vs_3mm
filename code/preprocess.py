@@ -16,6 +16,19 @@ import nibabel as nib
 import utils
 
 
+def manual_label_filename(base_name, label):
+    """Insert a BIDS `label-<value>` entity before the trailing `_seg.nii.gz` suffix.
+
+    Matches the ground-truth naming convention used under derivatives/manual/
+    (see https://intranet.neuro.polymtl.ca/data/dataset-curation.html#building-the-derivatives-datasets),
+    e.g. `..._bold_moco_mean_seg.nii.gz` -> `..._bold_moco_mean_label-SC_seg.nii.gz`.
+    """
+    suffix = "_seg.nii.gz"
+    if not base_name.endswith(suffix):
+        return base_name
+    return base_name[: -len(suffix)] + f"_label-{label}_seg.nii.gz"
+
+
 #####################################################
 class Preprocess_main:
     """
@@ -526,11 +539,12 @@ class Preprocess_Sc:
         # --- Manual segmentation paths -------------------------------------------------------------------
         if img_type == "func":
             if tissue == "csf":
-                o_manual = os.path.join(self.manual_dir, f"sub-{ID}", "func", base_name.split(".nii.gz")[0] + "_CSF_seg.nii.gz")
+                o_manual = os.path.join(self.manual_dir, f"sub-{ID}", "func",
+                                         manual_label_filename(base_name.split(".nii.gz")[0] + "_seg.nii.gz", "CSF"))
             else:
-                o_manual = os.path.join(self.manual_dir, f"sub-{ID}", "func", os.path.basename(o_img))
+                o_manual = os.path.join(self.manual_dir, f"sub-{ID}", "func", manual_label_filename(os.path.basename(o_img), "SC"))
         else:
-            o_manual = os.path.join(self.manual_dir, f"sub-{ID}", "anat", os.path.basename(o_img))
+            o_manual = os.path.join(self.manual_dir, f"sub-{ID}", "anat", manual_label_filename(os.path.basename(o_img), "SC"))
 
         # --- Run segmentation ----------------------------------------------------------------------------
         if not (os.path.exists(o_img) or os.path.exists(o_manual)) or redo:
@@ -641,15 +655,18 @@ class Preprocess_Sc:
             )
         else:
             label_file = os.path.join(
-                o_folder, f"{base_name}_space-orig_label-ivd_mask.nii.gz"
+                o_folder, f"{base_name}_label-discs_dlabel.nii.gz"
             )
 
         # --- Manual segmentation paths -------------------------------------------------------------------
 
-        o_manual = os.path.join(self.manual_dir, f"sub-{ID}, anat", f"{base_name}_space-orig_label-ivd_mask.nii.gz")
+        o_manual = os.path.join(self.manual_dir, f"sub-{ID}", "anat", f"{base_name}_label-discs_dlabel.nii.gz")
+        manual_exists = os.path.exists(o_manual)
+        if manual_exists:
+            label_file = o_manual
 
         # --- Run labeling -------------------------------------------------------------------
-        if not (os.path.exists(label_file) or os.path.exists(o_manual)) or redo:
+        if not (os.path.exists(label_file) or manual_exists) or redo:
             if auto:
                 print(f">>>>> Running totalspineseg for sub-{ID}...")
 
@@ -684,8 +701,7 @@ class Preprocess_Sc:
 
         # --- Use manual segmentation if available ---------------------------------------------------------
 
-        if os.path.exists(o_manual):
-            o_img=o_manual
+        if manual_exists:
             print("/!\\ Manual segmentation file detected — using it as output.")
             # Generate QC report
             cmd_qc=f"sct_qc -i {i_img} -s {o_manual} -p sct_label_utils -qc {self.qc_dir} -qc-subject sub-{ID} -qc-contrast {task_name or 'anat'} -v 0"
@@ -699,12 +715,12 @@ class Preprocess_Sc:
 
         # --- QC visualization ---------------------------------------------------------------
         if verbose:
-            if auto:
-                qc_indiv_path = os.path.join(self.qc_dir, self.qc_dir.split("/")[-3], f"sub-{ID}", "anat", "sct_totalspineseg")
-                tag = "automatic vertebra labeling (totalspineseg)"
-            else:
+            if manual_exists:
                 qc_indiv_path = os.path.join(self.qc_dir, self.qc_dir.split("/")[-3], f"sub-{ID}", "anat", "sct_label_utils")
                 tag = "manual vertebra labeling"
+            else:
+                qc_indiv_path = os.path.join(self.qc_dir, self.qc_dir.split("/")[-3], f"sub-{ID}", "anat", "sct_totalspineseg")
+                tag = "automatic vertebra labeling (totalspineseg)"
 
             self._plot_qc(
                 ID=ID,
@@ -791,13 +807,13 @@ class Preprocess_Sc:
         warp_from_PAM502anat = os.path.join(o_folder, f"sub-{ID}_from-PAM50_to-{tag}_mode-image_xfm.nii.gz") # warping field form PAM50 to anat
 
         # --- Use manual segmentation if available ---------------------------------------------------------
-        manual_seg = os.path.join(self.manual_dir, f"sub-{ID}", ses_name, "anat", os.path.basename(seg_img))
+        manual_seg = os.path.join(self.manual_dir, f"sub-{ID}", ses_name, "anat", manual_label_filename(os.path.basename(seg_img), "SC"))
         if os.path.exists(manual_seg):
             print("Segmentation file will be the manually corrected file")
             seg_img = manual_seg
 
          # --- Use manual labels if available ---------------------------------------------------------
-        manual_labels = glob.glob(os.path.join(self.manual_dir, f"sub-{ID}", ses_name, "anat", "*label-ivd_mask.nii.gz"))
+        manual_labels = glob.glob(os.path.join(self.manual_dir, f"sub-{ID}", ses_name, "anat", "*label-discs_dlabel.nii.gz"))
         if manual_labels:
             print("Labels file will be the manually corrected file")
             labels_img = manual_labels[0]
@@ -1096,7 +1112,7 @@ def copy_segmentation_from_ref_tag(ID, tag, ref_tag, manual_dir, preprocessing_d
 
     # We need to copy either the manual segmentation file if it exists for the motor task, or the
     # automatic segmentation file if it doesn't
-    fname_ref_manual_seg_list = glob.glob(os.path.join(manual_dir, f"sub-{ID}", "func", f"sub-{ID}_{ref_tag}_*bold_moco_mean_seg.nii.gz"))
+    fname_ref_manual_seg_list = glob.glob(os.path.join(manual_dir, f"sub-{ID}", "func", f"sub-{ID}_{ref_tag}_*bold_moco_mean_label-SC_seg.nii.gz"))
     fname_ref_auto_seg_list = glob.glob(os.path.join(preprocessing_dir.format(ID), "func", ref_tag, "sct_deepseg",
                                                      f"sub-{ID}_{ref_tag}_*bold_moco_mean_seg.nii.gz"))
     if len(fname_ref_manual_seg_list) > 0:
@@ -1118,7 +1134,7 @@ def copy_csf_segmentation_from_ref_tag(ID, tag, ref_tag, manual_dir, preprocessi
 
     # We need to copy either the manual segmentation file if it exists for the motor task, or the
     # automatic segmentation file if it doesn't
-    fname_ref_manual_seg_list = glob.glob(os.path.join(manual_dir, f"sub-{ID}", "func", f"sub-{ID}_{ref_tag}_*bold_moco_mean_CSF_seg.nii.gz"))
+    fname_ref_manual_seg_list = glob.glob(os.path.join(manual_dir, f"sub-{ID}", "func", f"sub-{ID}_{ref_tag}_*bold_moco_mean_label-CSF_seg.nii.gz"))
     fname_ref_auto_seg_list = glob.glob(os.path.join(preprocessing_dir.format(ID), "func", ref_tag, "sct_propseg",
                                                      f"sub-{ID}_{ref_tag}_*bold_moco_mean_CSF_seg.nii.gz"))
     if len(fname_ref_manual_seg_list) > 0:
