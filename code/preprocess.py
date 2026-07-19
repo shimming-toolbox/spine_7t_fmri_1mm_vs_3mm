@@ -111,6 +111,16 @@ class Preprocess_main:
                 shutil.copy(raw_anat, os.path.join(ID_preproc_dir, "anat"))
 
 
+def print_step_header(label, ID, *parts):
+    """Print a consistent section header for a processing step, e.g.
+    '=== ANAT SPINAL CORD SEGMENTATION : sub-102 task-rest ===',
+    so stdout always shows which step/segmentation is being discussed,
+    regardless of whether the automatic or a manual/cached path is taken.
+    """
+    context = " ".join(p for p in (f"sub-{ID}", *parts) if p)
+    print(f"\n=== {label.upper()} : {context} ===")
+
+
 class Preprocess_Sc:
     """
     The Preprocess class is used to compute spinal cord preprocessing
@@ -326,7 +336,7 @@ class Preprocess_Sc:
         if mask_img is None:
             raise ValueError("Please provide the mask image filename.")
 
-
+        print_step_header("motion correction", ID, ses_name, task_name, run_name)
 
         # --- Define main folders ----------------------------------------------------------
         preprocess_dir =self.preprocessing_dir.format(ID)
@@ -480,6 +490,11 @@ class Preprocess_Sc:
         if img_type == "func" and tissue==None and mask_qc is None:
             raise Warning("Provide a mask around the cord for QC computation: mask_qc='mymask.nii.gz'")
 
+        if img_type == "func":
+            seg_label = "func CSF segmentation" if tissue == "csf" else "func spinal cord segmentation"
+        else:
+            seg_label = {"gm": "anat gray matter segmentation", "wm": "anat white matter segmentation"}.get(tissue, "anat spinal cord segmentation")
+        print_step_header(seg_label, ID, ses_name, task_name)
 
         # --- Define folders and filenames ----------------------------------------------------------------
         preprocess_dir = self.preprocessing_dir.format(ID)
@@ -604,6 +619,8 @@ class Preprocess_Sc:
             raise Warning("Please provide participant ID, e.g., _.stc(ID='A001')")
         if i_img is None:
             raise Warning("Please provide input filename")
+
+        print_step_header(f"vertebral disc labeling ({'totalspineseg' if auto else 'manual'})", ID, ses_name, task_name)
 
         # --- Define output folder -----------------------------------------------------------
         preprocess_dir = self.preprocessing_dir.format(ID)
@@ -757,6 +774,8 @@ class Preprocess_Sc:
         if i_img is None or seg_img is None or labels_img is None:
             raise Warning("Provide i_img, seg_img, and labels_img")
 
+        print_step_header("anat-to-PAM50 registration", ID, ses_name, task_name)
+
         if param is None:
             param = "step=1,type=seg,algo=centermassrot:step=2,type=im,algo=syn,iter=5,slicewise=1,metric=CC,smooth=0"
 
@@ -871,6 +890,8 @@ class Preprocess_Sc:
             raise Warning("Please provide participant ID, e.g., _.stc(ID='A001')")
         if i_img is None or i_seg is None or initwarp is None or initwarpinv is None:
             raise Warning("Provide i_img, i_seg, and warping fields (initwarp, initwarpinv)")
+
+        print_step_header(f"{img_type}-to-PAM50 registration", ID, ses_name, task_name, run_name)
 
         # --- Default template files -----------------------------------------------------------------------
         if PAM50_cord is None:
