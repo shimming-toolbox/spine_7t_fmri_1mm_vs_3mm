@@ -492,10 +492,11 @@ class TSNR_main:
         # preprocessing outputs (preprocessing/sub-<ID>/func/<tag>/tsnr/), not under
         # first_level/ -- tSNR is computed during --preprocess, not --firstlevel (#70).
         self.preprocessing_dir = os.path.join(self.config["raw_dir"], self.config["preprocess_dir"]["main_dir"])
-        # Cross-subject summary CSVs have no single subject/acquisition to live under,
-        # so they go directly in derivatives/processing/ (same convention as
-        # acquisition_parameters.csv).
-        self.path_tsnr = os.path.join(self.config["raw_dir"], self.config["derivatives_dir"], "processing")
+        # Cross-subject summary CSVs have no single subject to live under, but --preprocess
+        # is what generates them, so they go at the root of preprocessing/, alongside the
+        # per-subject sub-<ID>/ folders (same "strip the trailing sub-{}" idiom used for
+        # first_level_dir/second_level_dir above).
+        self.path_tsnr = self.preprocessing_dir.format("").split("sub")[0]
         self.path_tsnr_inTemplate = os.path.join(self.second_level_dir.format("snr"))
         self.fname_metrics = {
             "ssnr": os.path.join(self.path_tsnr, "ssnr_metrics.csv"),
