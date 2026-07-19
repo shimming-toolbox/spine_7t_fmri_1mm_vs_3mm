@@ -143,8 +143,8 @@ Runs `preprocessing_workflow.py`. For each subject and acquisition:
 1. Compute temporal mean
 2. Detect centerline on mean → build moco mask
 3. Motion-correct time series (`sct_fmri_moco`)
-4. **SMS acquisitions only (`+sms2`)**: correct even/odd slice AP jitter caused by the SMS slice-ordering scheme (`destripe_slices_img`, using `moco_params_y`); recompute moco mean from the destriped 4D volume → `*_moco_destriped.nii.gz`
-5. Segment cord on moco mean (`sct_deepseg`) — uses destriped mean for SMS acquisitions
+4. **SMS acquisitions only (`+sms2`)**: correct even/odd slice AP jitter caused by the SMS slice-ordering scheme (`destripe_slices_img`, using `moco_params_y`). The destriped 4D volume is swapped into the canonical `*_moco.nii.gz` path — the original raw `sct_fmri_moco` output is kept alongside as `*_moco_not-destriped.nii.gz` — and the moco mean is recomputed from it. This means every downstream step (segmentation, tSNR, denoising, first-level GLM) sees destriped data automatically, since they all locate the functional time series via the `*_moco.nii.gz` name.
+5. Segment cord on moco mean (`sct_deepseg`)
 6. Register PAM50 → REST moco mean (`sct_register_multimodal` via `coreg_img2PAM50`, initwarp = T2w PAM50 warp)
 
 REST is always processed first so MOTOR can borrow from it.
@@ -153,16 +153,17 @@ REST is always processed first so MOTOR can borrow from it.
 
 These share the same FOV as the matching REST scan, so the REST segmentation is reused:
 1. Moco (temporal mean → centerline → `sct_fmri_moco`)
-2. Register REST moco mean → MOTOR moco mean (`sct_register_multimodal`, affine, output saved under `sct_register_rest2motor/`)
-3. Warp REST cord segmentation into MOTOR space via that registration
-4. Map PAM50 into MOTOR space by composing REST's PAM50 warp with the REST→MOTOR warp (`sct_apply_transfo -w PAM50_to_REST -w REST_to_MOTOR`) — no new registration needed
+2. **SMS acquisitions only (`+sms2`)**: destripe, same as REST above — required since MOTOR is registered to the (destriped) REST moco mean in the next step
+3. Register REST moco mean → MOTOR moco mean (`sct_register_multimodal`, affine, output saved under `sct_register_rest2motor/`)
+4. Warp REST cord segmentation into MOTOR space via that registration
+5. Map PAM50 into MOTOR space by composing REST's PAM50 warp with the REST→MOTOR warp (`sct_apply_transfo -w PAM50_to_REST -w REST_to_MOTOR`) — no new registration needed
 
 If no matching REST exists for this acquisition, falls back to full independent processing.
 
 **Derived — `+avg3mm`** (slice-averaged, REST only)
 
 The 1mm data is resampled to simulate 3mm z-resolution by averaging groups of slices:
-1. Average every 3 slices of the already-destriped 1mm moco time series along z (`*_moco_destriped.nii.gz`)
+1. Average every 3 slices of the (already destriped, for SMS acquisitions) 1mm moco time series along z
 2. Copy segmentation from the 1mm source
 
 No PAM50 registration needed — `+avg3mm` is only used for native-space EPI comparison figures.
@@ -170,7 +171,7 @@ No PAM50 registration needed — `+avg3mm` is only used for native-space EPI com
 **Derived — `+smooth3mm`** (z-smoothed, REST and MOTOR)
 
 The 1mm data is z-smoothed with a Gaussian kernel to match the 3mm point spread function:
-1. Smooth the already-destriped 1mm moco time series along z (`*_moco_destriped.nii.gz`)
+1. Smooth the (already destriped, for SMS acquisitions) 1mm moco time series along z
 2. Copy segmentation from the 1mm source
 3. Copy PAM50 warp fields from the 1mm source — the smoothing does not change the geometry, so the 1mm registration is equally valid
 

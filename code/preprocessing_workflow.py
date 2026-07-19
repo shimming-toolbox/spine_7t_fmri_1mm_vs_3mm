@@ -100,8 +100,15 @@ manual_dir = os.path.join(config["raw_dir"], config["manual_dir"])
 def destripe_if_sms(ID, tag, moco_f, moco_mean_f, redo, verbose):
     """
     For SMS acquisitions (identified by "sms" in tag), correct the even/odd slice
-    AP jitter caused by the SMS slice-ordering scheme, and recompute the moco mean
-    from the destriped 4D volume. No-op (returns moco_mean_f unchanged) otherwise.
+    AP jitter caused by the SMS slice-ordering scheme, then swap the destriped 4D
+    volume into the canonical "*_moco.nii.gz" path -- the original raw sct_fmri_moco
+    output is kept alongside, renamed "*_moco_not-destriped.nii.gz" -- and recompute
+    the moco mean from it. No-op (returns moco_mean_f unchanged) otherwise.
+
+    Swapping the destriped volume into the canonical path, rather than keeping it
+    under a separate "_destriped" name, means every downstream consumer that globs
+    for "*_moco.nii.gz" (tSNR, denoising, first-level GLM) automatically gets
+    destriped data too, with no changes needed outside this function (#68).
 
     Used for both REST and MOTOR acquisitions: MOTOR is registered to REST
     (see epi_derive_seg_from_rest), so MOTOR must be destriped too, or that
@@ -117,13 +124,17 @@ def destripe_if_sms(ID, tag, moco_f, moco_mean_f, redo, verbose):
         print(f'WARNING: moco_params_y not found for {tag}, skipping destripe.', flush=True)
         return moco_mean_f
 
-    destriped_f = moco_f.replace("_moco.nii.gz", "_moco_destriped.nii.gz")
-    need_new_mean = not os.path.exists(destriped_f) or redo
-    destriped_f = utils.destripe_slices_img(i_img=moco_f, moco_params_img=moco_params_y_f,
-                                             o_img=destriped_f, redo=redo, verbose=verbose)
-    if need_new_mean:
-        moco_mean_f = utils.tmean_img(ID=ID, i_img=destriped_f, o_img=moco_mean_f, redo=True, verbose=verbose)
-    print(f'=== Destripe : Done  {ID} {tag} {run_name} ===', flush=True)
+    not_destriped_f = moco_f.replace("_moco.nii.gz", "_moco_not-destriped.nii.gz")
+    if not os.path.exists(not_destriped_f) or redo:
+        destriped_tmp_f = moco_f.replace("_moco.nii.gz", "_moco_destriped_tmp.nii.gz")
+        utils.destripe_slices_img(i_img=moco_f, moco_params_img=moco_params_y_f,
+                                   o_img=destriped_tmp_f, redo=True, verbose=verbose)
+        if os.path.exists(not_destriped_f):
+            os.remove(not_destriped_f)
+        os.rename(moco_f, not_destriped_f)
+        os.rename(destriped_tmp_f, moco_f)
+        moco_mean_f = utils.tmean_img(ID=ID, i_img=moco_f, o_img=moco_mean_f, redo=True, verbose=verbose)
+        print(f'=== Destripe : Done  {ID} {tag} {run_name} ===', flush=True)
     return moco_mean_f
 
 
