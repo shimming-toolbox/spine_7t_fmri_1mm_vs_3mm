@@ -673,6 +673,12 @@ class Preprocess_Sc:
             # Generate QC report
             cmd_qc=f"sct_qc -i {i_img} -s {o_manual} -p sct_label_utils -qc {self.qc_dir} -qc-subject sub-{ID} -qc-contrast {task_name or 'anat'} -v 0"
             os.system(cmd_qc)
+        elif auto:
+            # Generate QC report for the disc labels. sct_deepseg spine's own -qc flag
+            # was removed (#45) since it QCs the full spine segmentation rather than
+            # the disc labels actually used downstream for PAM50 registration.
+            cmd_qc = f"sct_qc -i {i_img} -s {label_file} -p sct_label_utils -qc {self.qc_dir} -qc-subject sub-{ID} -qc-contrast {task_name or 'anat'} -v 0"
+            os.system(cmd_qc)
 
         # --- QC visualization ---------------------------------------------------------------
         if verbose:
