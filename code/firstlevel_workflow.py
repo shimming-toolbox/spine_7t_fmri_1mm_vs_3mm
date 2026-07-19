@@ -57,20 +57,15 @@ if IDs == [""]:
 #Import scripts
 sys.path.append(os.path.join(path_code, "code")) # Change this line according to your directory
 import postprocess, preprocess
-import figures
 
 glm_ana=postprocess.GLM_main(config,IDs=IDs)
 preprocess_Sc=preprocess.Preprocess_Sc(config,IDs=IDs)
-figures=figures.Figures_main(config, IDs=IDs)
 
 # initialize directories
 preprocessing_dir = os.path.join(config["raw_dir"], config["preprocess_dir"]["main_dir"])
 denoising_dir= os.path.join(config["raw_dir"], config["denoising"]["dir"])
 manual_dir = os.path.join(config["raw_dir"], config["manual_dir"])
 first_level_dir = os.path.join(config["raw_dir"], config["first_level"]["dir"])
-main_fig_dir = os.path.join(config["raw_dir"], "derivatives", "processing", "figures")
-fig_dir = os.path.join(main_fig_dir, "first_level")
-os.makedirs(main_fig_dir, exist_ok=True)
 
 #------------------------------------------------------------------
 #------ I. Compute tSNR
