@@ -92,7 +92,6 @@ ses_name = ""
 
 # initialize directories
 preprocessing_dir = os.path.join(config["raw_dir"], config["preprocess_dir"]["main_dir"])
-derivatives_dir = os.path.join(config["raw_dir"], config["derivatives_dir"])
 manual_dir = os.path.join(config["raw_dir"], config["manual_dir"])
 
 
@@ -655,7 +654,7 @@ for ID_nb, ID in enumerate(IDs):
 
 df = pd.DataFrame(acq_parameters)
 df_ordered = df[['ID', 'task', 'acq', 'run', 'EchoTime', 'RepetitionTime', 'FlipAngle', 'SliceThickness', 'SpacingBetweenSlices', 'NumberOfVolumes', 'BaseResolution', 'PartialFourier', 'ParallelReductionFactorInPlane', 'MultibandAccelerationFactor']]
-df_ordered.to_csv(os.path.join(derivatives_dir, "processing", "acquisition_parameters.csv"), index=False)
+df_ordered.to_csv(os.path.join(preprocessing_dir.format("").split("sub")[0], "acquisition_parameters.csv"), index=False)
 
 # Print participant metrics
 print(f"Number of particiants that have rest scans: {df_ordered[df_ordered['task'] == 'rest']['ID'].nunique()}", flush=True)
