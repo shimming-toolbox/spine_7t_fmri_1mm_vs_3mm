@@ -67,6 +67,29 @@ second_level_dir = os.path.join(config["raw_dir"], config["second_level"]["dir"]
 
 mask = os.path.join(first_level_dir.format('glm',"").split("sub")[0], "common_mask_PAM50.nii.gz")
 
+
+def find_tsnr_dir_for_acq(ID, acq_name):
+    """
+    Find the func/<tag>/tsnr/ folder for this subject/acquisition (preferring a
+    "rest" tag match, falling back to any tag match, same selection logic as
+    before). tSNR now lives alongside each acquisition's other preprocessing
+    outputs (see TSNR_main.tsnr_dir_for() in postprocess.py), not under
+    first_level/ (#70).
+
+    Returns (tag, tsnr_dir), or (None, None) if no match is found.
+    """
+    func_dir = os.path.join(preprocessing_dir.format(ID), "func")
+    if not os.path.isdir(func_dir):
+        return None, None
+    dirs = [d for d in os.listdir(func_dir)
+            if os.path.isdir(os.path.join(func_dir, d, "tsnr"))]
+    rest_dirs = [d for d in dirs if "rest" in d and acq_name in d]
+    selected_dirs = rest_dirs if rest_dirs else [d for d in dirs if acq_name in d]
+    if not selected_dirs:
+        return None, None
+    return selected_dirs[0], os.path.join(func_dir, selected_dirs[0], "tsnr")
+
+
 #------------------------------------------------------------------
 #------ Compute average tSNR
 #------------------------------------------------------------------
@@ -75,25 +98,18 @@ for acq_name in config["design_exp"]["acq_names"]:
     cord_seg_file = []
     warp_file = []
     valid_IDs = []
-    snr_path = None
     for ID in IDs:
-        snr_path = first_level_dir.format("snr", ID)
-        if not os.path.isdir(snr_path):
-            print(f"WARNING: tSNR dir missing for sub-{ID}, skipping.", flush=True)
-            continue
-        dirs = [d for d in os.listdir(snr_path) if os.path.isdir(os.path.join(snr_path, d))]
-        rest_dirs = [d for d in dirs if "rest" in d and acq_name in d]
-        selected_dirs = rest_dirs if rest_dirs else [d for d in dirs if acq_name in d]
-        if not selected_dirs:
+        tag, tsnr_dir = find_tsnr_dir_for_acq(ID, acq_name)
+        if tsnr_dir is None:
             print(f"WARNING: No tSNR dir for sub-{ID} acq-{acq_name}, skipping.", flush=True)
             continue
-        tsnr_files = glob.glob(os.path.join(snr_path, selected_dirs[0], "*_moco_tsnr.nii.gz"))
-        seg_files = glob.glob(os.path.join(preprocessing_dir.format(ID), 'func', selected_dirs[0], config["preprocess_f"]["func_seg"].format(ID, selected_dirs[0], "")))
-        warp_files = glob.glob(os.path.join(preprocessing_dir.format(ID), 'func', selected_dirs[0], f"sub-{ID}_{selected_dirs[0]}_from-func_to_PAM50_mode-image_xfm.nii.gz"))
+        tsnr_files = glob.glob(os.path.join(tsnr_dir, "*_moco_tsnr.nii.gz"))
+        seg_files = glob.glob(os.path.join(preprocessing_dir.format(ID), 'func', tag, config["preprocess_f"]["func_seg"].format(ID, tag, "")))
+        warp_files = glob.glob(os.path.join(preprocessing_dir.format(ID), 'func', tag, f"sub-{ID}_{tag}_from-func_to_PAM50_mode-image_xfm.nii.gz"))
         if not (tsnr_files and seg_files and warp_files):
             print(f"WARNING: Missing tSNR/seg/warp for sub-{ID} acq-{acq_name}, skipping.", flush=True)
             continue
-        task_name = selected_dirs[0].split("_")[0].split("-")[1]
+        task_name = tag.split("_")[0].split("-")[1]
         tsnr_id_fname.append(tsnr_files[0])
         cord_seg_file.append(seg_files[0])
         warp_file.append(warp_files[0])
@@ -124,22 +140,17 @@ for acq_name in avg_acq_names:
     warp_file = []
     valid_IDs = []
     for ID in IDs:
-        snr_path = first_level_dir.format("snr", ID)
-        if not os.path.isdir(snr_path):
+        tag, tsnr_dir = find_tsnr_dir_for_acq(ID, acq_name)
+        if tsnr_dir is None:
             continue
-        dirs = [d for d in os.listdir(snr_path) if os.path.isdir(os.path.join(snr_path, d))]
-        rest_dirs = [d for d in dirs if "rest" in d and acq_name in d]
-        selected_dirs = rest_dirs if rest_dirs else [d for d in dirs if acq_name in d]
-        if not selected_dirs:
-            continue
-        tsnr_files = glob.glob(os.path.join(snr_path, selected_dirs[0], "*_moco_tsnr.nii.gz"))
+        tsnr_files = glob.glob(os.path.join(tsnr_dir, "*_moco_tsnr.nii.gz"))
         # seg and warp live under the source acq's preprocessing dir (derived has none)
         source_tag = f"task-rest_acq-{source_acq}"
         seg_files = glob.glob(os.path.join(preprocessing_dir.format(ID), 'func', source_tag, config["preprocess_f"]["func_seg"].format(ID, source_tag, "")))
         warp_files = glob.glob(os.path.join(preprocessing_dir.format(ID), 'func', source_tag, f"sub-{ID}_{source_tag}_from-func_to_PAM50_mode-image_xfm.nii.gz"))
         if not (tsnr_files and seg_files and warp_files):
             continue
-        task_name = selected_dirs[0].split("_")[0].split("-")[1]
+        task_name = tag.split("_")[0].split("-")[1]
         tsnr_id_fname.append(tsnr_files[0])
         cord_seg_file.append(seg_files[0])
         warp_file.append(warp_files[0])

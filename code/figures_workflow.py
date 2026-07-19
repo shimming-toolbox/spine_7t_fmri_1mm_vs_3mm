@@ -320,7 +320,6 @@ from utils import compute_tsnr_map, compute_SNR
 
 out_dir         = os.path.join(path_data, "derivatives", "processing", "figures", "metrics")
 preprocessing_dir_compare = os.path.join(path_data, config["preprocess_dir"]["main_dir"])
-tsnr_precomp_dir = os.path.join(path_data, config["first_level"]["dir"].format("snr", "").split("sub")[0])
 os.makedirs(out_dir, exist_ok=True)
 
 REGULAR_ACQS = config["design_exp"]["acq_names"]
@@ -434,7 +433,7 @@ if not os.path.exists(tsnr_csv) or redo:
                 if acq_name in DERIVED_ACQS:
                     tsnr_map = _get_tsnr_for_derived(ID, task, acq_name)
                 else:
-                    cands = glob.glob(os.path.join(tsnr_precomp_dir, f"sub-{ID}", tag,
+                    cands = glob.glob(os.path.join(preprocessing_dir_compare.format(ID), "func", tag, "tsnr",
                                                    f"sub-{ID}_{tag}*_bold_moco_tsnr.nii.gz"))
                     tsnr_map = sorted(cands)[-1] if cands else None
                 if not tsnr_map or not os.path.exists(tsnr_map):
