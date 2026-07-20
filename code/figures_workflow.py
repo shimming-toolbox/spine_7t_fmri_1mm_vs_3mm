@@ -40,6 +40,7 @@ if IDs == [""]:
 
 sys.path.append(os.path.join(path_code, "code"))
 import postprocess
+from preprocess import manual_label_filename
 import figures as figures_module
 
 figures = figures_module.Figures_main(config, IDs=IDs)
@@ -521,8 +522,11 @@ def _t2star_in_epi(ID, tag):
     if not os.path.exists(t2star):
         return None
 
-    # T2*w seg: prefer manual correction
-    manual_t2star_seg = os.path.join(manual_dir_compare, f"sub-{ID}", "anat", f"sub-{ID}_T2star_seg.nii.gz")
+    # T2*w seg: prefer manual correction (derivatives/manual/ uses the BIDS label-SC
+    # convention, see manual_label_filename() / #63-#64; preprocessing/ output naming
+    # is unaffected)
+    manual_t2star_seg = os.path.join(manual_dir_compare, f"sub-{ID}", "anat",
+                                     manual_label_filename(f"sub-{ID}_T2star_seg.nii.gz", "SC"))
     auto_t2star_seg   = os.path.join(preprocessing_dir_compare.format(ID), "anat", "sct_deepseg",
                                      f"sub-{ID}_T2star_seg.nii.gz")
     t2star_seg = manual_t2star_seg if os.path.exists(manual_t2star_seg) else auto_t2star_seg
