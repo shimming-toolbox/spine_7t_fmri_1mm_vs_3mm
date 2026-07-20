@@ -488,12 +488,26 @@ class TSNR_main:
         self.redo = redo
         self.first_level_dir = os.path.join(self.config["raw_dir"], self.config["first_level"]["dir"])  # directory of the derivatives data
         self.second_level_dir= os.path.join(self.config["raw_dir"], self.config["second_level"]["dir"])
-        self.path_tsnr = os.path.join(self.first_level_dir.format("snr","").split("sub")[0])
+        # Per-subject/per-acquisition tSNR maps live alongside that acquisition's other
+        # preprocessing outputs (preprocessing/sub-<ID>/func/<tag>/tsnr/), not under
+        # first_level/ -- tSNR is computed during --preprocess, not --firstlevel (#70).
+        self.preprocessing_dir = os.path.join(self.config["raw_dir"], self.config["preprocess_dir"]["main_dir"])
+        # Cross-subject summary CSVs have no single subject to live under, but --preprocess
+        # is what generates them, so they go at the root of preprocessing/, alongside the
+        # per-subject sub-<ID>/ folders (same "strip the trailing sub-{}" idiom used for
+        # first_level_dir/second_level_dir above).
+        self.path_tsnr = self.preprocessing_dir.format("").split("sub")[0]
         self.path_tsnr_inTemplate = os.path.join(self.second_level_dir.format("snr"))
         self.fname_metrics = {
             "ssnr": os.path.join(self.path_tsnr, "ssnr_metrics.csv"),
             "tsnr": os.path.join(self.path_tsnr, "tsnr_metrics.csv")
         }
+
+    def tsnr_dir_for(self, ID, tag):
+        """Per-subject/per-acquisition tSNR output folder, nested inside that
+        acquisition's own preprocessing folder (same convention as sct_fmri_moco/,
+        sct_deepseg/, etc.)."""
+        return os.path.join(self.preprocessing_dir.format(ID), "func", tag, "tsnr")
 
     def generate_tsnr_maps_and_csv(self, space="native", native_gm_mask=None):
         """
@@ -502,7 +516,6 @@ class TSNR_main:
             choose the option "native" or "PAM50"
         """
         os.makedirs(self.path_tsnr, exist_ok=True)
-        os.makedirs(self.path_tsnr_inTemplate, exist_ok=True)
         dfs= {
             "tsnr": pd.DataFrame(columns=["IDs", "task", "acq", "tsnr"]),
             "ssnr": pd.DataFrame(columns=["IDs", "task", "acq", "ssnr"])
@@ -538,7 +551,7 @@ class TSNR_main:
                     selected_mean_file = selected_file[:-len(".nii.gz")] + "_mean.nii.gz"
 
                     # Compute tSNR map in native space
-                    path_tsnr_sub_folder = os.path.join(self.path_tsnr, f"sub-{ID}", tag)
+                    path_tsnr_sub_folder = self.tsnr_dir_for(ID, tag)
                     fname_tsnr = compute_tsnr_map(selected_file, path_tsnr_sub_folder, self.redo, max_vols_for_tsnr)
 
                     # Segmentation file in native space
@@ -749,7 +762,7 @@ class TSNR_main:
                     print(f"WARNING: Missing seg or warp for sub-{ID} {source_acq}, skipping avg3mm tSNR.", flush=True)
                     continue
 
-                path_tsnr_sub_folder = os.path.join(self.path_tsnr, f"sub-{ID}", tag_derived)
+                path_tsnr_sub_folder = self.tsnr_dir_for(ID, tag_derived)
                 os.makedirs(path_tsnr_sub_folder, exist_ok=True)
 
                 avg_moco = os.path.join(path_tsnr_sub_folder, f"sub-{ID}_{tag_derived}_bold_moco.nii.gz")
