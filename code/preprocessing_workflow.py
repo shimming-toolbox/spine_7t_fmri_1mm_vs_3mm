@@ -358,30 +358,27 @@ def _get_seg_file(ID, source_tag):
 
 def epi_avg_slices_moco(ID, source_tag, tag, n_slices_avg, redo, verbose):
     # ------------------------------------------------------------------
-    # ------ Average n_slices_avg adjacent slices of the motion-corrected data
+    # ------ Average n_slices_avg adjacent slices of the source's temporal mean.
+    # ------ This is mathematically equivalent to averaging slices of the full 4D
+    # ------ series and then taking the temporal mean (both are linear averages
+    # ------ over independent axes), but far cheaper, and avoids materializing a
+    # ------ full 4D series that nothing downstream actually reads.
     # ------------------------------------------------------------------
     source_moco_dir = os.path.join(preprocessing_dir.format(ID), "func", source_tag, "sct_fmri_moco")
     moco_dir = os.path.join(preprocessing_dir.format(ID), "func", tag, "sct_fmri_moco")
     os.makedirs(moco_dir, exist_ok=True)
 
-    # Prefer already-destriped source (produced by epi_full_processing for sms acqs)
-    source_moco_files = (sorted(glob.glob(os.path.join(source_moco_dir, f"sub-{ID}_{source_tag}_*bold_moco_destriped.nii.gz"))) or
-                         sorted(glob.glob(os.path.join(source_moco_dir, f"sub-{ID}_{source_tag}_*bold_moco.nii.gz"))))
+    source_mean_files = sorted(glob.glob(os.path.join(source_moco_dir, f"sub-{ID}_{source_tag}_*bold_moco_mean.nii.gz")))
 
     outputs = []
-    for source_moco_f in source_moco_files:
-        match = re.search(r"_?(run-\d+)", source_moco_f)
+    for source_mean_f in source_mean_files:
+        match = re.search(r"_?(run-\d+)", source_mean_f)
         run_name = match.group(1) if match else ""
 
-        moco_f = os.path.join(moco_dir, os.path.basename(source_moco_f)
-                              .replace(source_tag, tag)
-                              .replace("_moco_destriped.nii.gz", "_moco.nii.gz"))
-        moco_f = utils.average_slices_img(i_img=source_moco_f, o_img=moco_f, n_slices_avg=n_slices_avg, redo=redo, verbose=verbose)
+        moco_mean_f = os.path.join(moco_dir, os.path.basename(source_mean_f).replace(source_tag, tag))
+        moco_mean_f = utils.average_slices_img(i_img=source_mean_f, o_img=moco_mean_f, n_slices_avg=n_slices_avg, redo=redo, verbose=verbose)
 
-        moco_mean_f = os.path.join(moco_dir, os.path.basename(moco_f).split(".")[0] + "_mean.nii.gz")
-        moco_mean_f = utils.tmean_img(ID=ID, i_img=moco_f, o_img=moco_mean_f, redo=redo, verbose=verbose)
-
-        outputs.append((moco_f, moco_mean_f, run_name))
+        outputs.append((moco_mean_f, run_name))
 
     print(f'=== Slice averaging (1mm -> {n_slices_avg}x) : Done  {ID} {tag} ===', flush=True)
 
@@ -389,7 +386,7 @@ def epi_avg_slices_moco(ID, source_tag, tag, n_slices_avg, redo, verbose):
 
 
 def epi_avg_slices_processing(ID, source_tag, tag, n_slices_avg, redo, verbose):
-    for moco_f, moco_mean_f, run_name in epi_avg_slices_moco(ID, source_tag, tag, n_slices_avg, redo, verbose):
+    for moco_mean_f, run_name in epi_avg_slices_moco(ID, source_tag, tag, n_slices_avg, redo, verbose):
         seg_func_sc_file = os.path.join(preprocessing_dir.format(ID), "func", tag,
                                         f"sub-{ID}_{tag}_bold_moco_mean_seg.nii.gz")
         if not os.path.exists(seg_func_sc_file) or redo:
