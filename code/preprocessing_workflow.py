@@ -24,7 +24,7 @@
 #------ Initialization
 #------------------------------------------------------------------
 # Imports
-import sys, json, glob, os, re, shutil, argparse
+import sys, json, glob, os, re, shutil, argparse, tempfile
 import numpy as np
 import nibabel as nib
 import pandas as pd
@@ -394,14 +394,20 @@ def epi_avg_slices_processing(ID, source_tag, tag, n_slices_avg, redo, verbose):
                                         f"sub-{ID}_{tag}_bold_moco_mean_seg.nii.gz")
         if not os.path.exists(seg_func_sc_file) or redo:
             src = _get_seg_file(ID, source_tag)
-            tmp = seg_func_sc_file.replace(".nii.gz", "_tmp.nii.gz")
-            utils.average_slices_img(i_img=src, o_img=tmp, n_slices_avg=n_slices_avg, redo=True)
-            nii = nib.load(tmp)
-            binary = (nii.get_fdata() >= 0.5).astype(np.uint8)
-            nib.save(nib.Nifti1Image(binary, nii.affine, nii.header), seg_func_sc_file)
-            os.remove(tmp)
+            # Resample (not block-average) the source segmentation onto the averaged-slice
+            # grid: sct_register_multimodal -identity 1 does a pure resampling (no
+            # registration search), which avoids the empty edge slices that a naive
+            # slice-block-average + threshold could produce.
+            with tempfile.TemporaryDirectory() as tmpdir:
+                cmd = (f"sct_register_multimodal -i {src} -d {moco_mean_f} "
+                       f"-identity 1 -x linear -ofolder {tmpdir} -v 0")
+                os.system(cmd)
+                reg_f = os.path.join(tmpdir, os.path.basename(src).replace(".nii.gz", "_reg.nii.gz"))
+                nii = nib.load(reg_f)
+                binary = (nii.get_fdata() >= 0.5).astype(np.uint8)
+                nib.save(nib.Nifti1Image(binary, nii.affine, nii.header), seg_func_sc_file)
 
-        print(f'=== Derived seg (avg{n_slices_avg}x from {source_tag}): Done {ID} {tag} {run_name} ===', flush=True)
+        print(f'=== Derived seg (resampled from {source_tag}): Done {ID} {tag} {run_name} ===', flush=True)
 
 
 def epi_smooth_slices_moco(ID, source_tag, tag, smooth_width, redo, verbose):
