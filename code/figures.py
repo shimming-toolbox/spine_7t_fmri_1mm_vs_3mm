@@ -41,7 +41,7 @@ class Figures_main:
         os.makedirs(self.first_level_fig,exist_ok=True)
         os.makedirs(self.second_level_fig,exist_ok=True)
      
-    def plot_first_level_maps(self, i_fnames=None, output_fname=None,titles=["shimBase","shimSlice"],cmap="autumn",stat_min=1.6, stat_max=4,background_fname=None,mask_fname=None, underlay_fname=None,task_name=None,plot_mip=True, participant_ids=None, verbose=True, redo=False,n_cols=5):
+    def plot_first_level_maps(self, i_fnames=None, output_fname=None,titles=["3mm","1mm (smooth3mm)"],cmap="autumn",stat_min=1.6, stat_max=4,background_fname=None,mask_fname=None, underlay_fname=None,task_name=None,plot_mip=True, participant_ids=None, verbose=True, redo=False,n_cols=5):
         """
         Plot first-level statistical maps for multiple participants and contrasts in a grid layout.
 
@@ -57,7 +57,7 @@ class Figures_main:
             n_participant_rows = (n_subjects + n_cols - 1) // n_cols  # number of participant rows
             n_rows = n_participant_rows * 3  # coronal, axial, gap
             n_actual_cols = min(n_subjects, n_cols)
-            total_cols = (n_cols * 4) - 1  # 2 maps + 1 spacer per participant expect for the 5th one
+            total_cols = (n_cols * 3) - 1  # 2 maps + 1 spacer per participant except for the last one
 
             # --- Load template, mask, and underlay ---
             template_img = nib.as_closest_canonical(nib.load(background_fname))
@@ -76,37 +76,30 @@ class Figures_main:
             fig_height = n_participant_rows *2
             fig_width = 7 #max paper width is 7 inches
             fig = plt.figure(figsize=(fig_width, fig_height))
-            fig.subplots_adjust(left=0.01,right=0.99,top=0.94,bottom=0.01)
+            fig.subplots_adjust(left=0.01,right=0.90,top=0.86,bottom=0.01)
 
             height_ratios = []
             for _ in range(n_participant_rows):
                 height_ratios += [6.5, 2.7, 3]  # coronal, axial, gap
-            
+
             width_ratios = []
             for i in range(n_cols):
-                width_ratios += [1, 1, 1]  # three map columns
+                width_ratios += [1, 1]  # two map columns
                 if i != n_cols - 1:     # add spacer except after last participant
                     width_ratios += [0.2]  # spacer column smaller
 
             gs = fig.add_gridspec(nrows=len(height_ratios), ncols=total_cols,
-                            height_ratios=height_ratios, 
+                            height_ratios=height_ratios,
                             width_ratios=width_ratios,
                             hspace=0.01,wspace=0.1)
 
             for subj_idx, maps in enumerate(i_fnames):
-                if len(maps) == 2:
-                    maps=maps+ [None]
-
                 col_idx = subj_idx % n_cols
-                row_participant = subj_idx // n_cols 
+                row_participant = subj_idx // n_cols
                 row_start = (subj_idx // n_cols) * 3
-                col_start = (subj_idx % n_cols) * 4   # 3 for maps, 1 for spacer (subj_idx % n_cols) * 3   
+                col_start = (subj_idx % n_cols) * 3   # 2 for maps, 1 for spacer
 
                 for map_idx, i_fname in enumerate(maps):
-                    if map_idx == 0:
-                        cmap = "winter"
-                    else:
-                        cmap = "autumn"
                     if i_fname is None:
                         ax = fig.add_subplot(gs[row_start, col_start + map_idx])
                         ax.axis("off")   # empty panel
@@ -146,21 +139,19 @@ class Figures_main:
                     ax_cor.axis("off")
 
                     if map_idx == 0:
-                        x_center = 1.7 
-                        y_top = 1.2
+                        x_center = 1.15
+                        y_top = 1.25
                         if participant_ids is not None:
                             subj_label = participant_ids[subj_idx]
                         else:
                             subj_label = subj_idx + 1
-                        ax_cor.text(x_center, y_top, f"ID #{subj_label}", ha='center', va='bottom', fontsize=8, fontweight='black', transform=ax_cor.transAxes, fontname="Arial")
+                        ax_cor.text(x_center, y_top, f"sub-{subj_label}", ha='center', va='bottom', fontsize=8, fontweight='black', transform=ax_cor.transAxes, fontname="Arial")
                         line_y = 1.2
-                        ax_cor.hlines(y=line_y, xmin=0.15, xmax=3, colors='black', linewidth=0.8, transform=ax_cor.transAxes, clip_on=False)
-        
-                        ax_cor.set_title(titles[0], color="black",  fontsize=6, fontname="Arial")
+                        ax_cor.hlines(y=line_y, xmin=0.15, xmax=2.3, colors='black', linewidth=0.8, transform=ax_cor.transAxes, clip_on=False)
+
+                        ax_cor.set_title(titles[0], color="black",  fontsize=6, fontname="Arial", y=1.02)
                     if map_idx == 1:
-                        ax_cor.set_title(f"{titles[1]}\nrun-01", color="black",  fontsize=6, fontname="Arial",y=0.94)
-                    if map_idx == 2 and i_fname != None:
-                        ax_cor.set_title(f"{titles[2]}\nrun-02", color="black",  fontsize=6, fontname="Arial",y=0.94)
+                        ax_cor.set_title(titles[1], color="black",  fontsize=6, fontname="Arial", y=1.02)
 
                     # Orientation labels only for first participant
                     if subj_idx == 0 and map_idx == 0:
@@ -204,39 +195,21 @@ class Figures_main:
                         ax_axi.text(0.98, 0.5, "R", transform=ax_axi.transAxes, color="white", fontsize=5, ha="right", va="center")
                         ax_axi.text(0.5, 0.98, "A", transform=ax_axi.transAxes, color="white", fontsize=5, ha="center", va="top")
                         ax_axi.text(0.5, 0.02, "P", transform=ax_axi.transAxes, color="white", fontsize=5, ha="center", va="bottom")
-                    
-                    # ---- Add colorbar only for the first participant and first map -----
-                    gap_col_idx = 2
-                    row_for_cbar = 0
-                    cbar_ax = fig.add_subplot(gs[row_for_cbar, gap_col_idx])
-                    cbar_ax.axis("off")
 
-                    # positions of the two colorbars
-                    pos_winter = [14.45, -3.8, 0.3, 0.8]
-                    pos_autumn = [14.80, -3.8, 0.3, 0.8]
+            # ---- Single colorbar (both conditions share the same colormap), placed once
+            # ---- in figure-fraction coordinates (independent of the participant grid) ----
+            ax_cbar = fig.add_axes([0.93, 0.75, 0.025, 0.15])
+            norm = plt.Normalize(vmin=stat_min, vmax=stat_max)
+            sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
+            sm.set_array([])
 
-                    ax_winter = cbar_ax.inset_axes(pos_winter)
-                    ax_autumn = cbar_ax.inset_axes(pos_autumn)
+            cbar = fig.colorbar(sm, cax=ax_cbar)
+            cbar.ax.set_yticks([])
+            cbar.ax.set_frame_on(False)
 
-                    norm = plt.Normalize(vmin=stat_min, vmax=stat_max)
-
-                    sm_winter = plt.cm.ScalarMappable(cmap="winter", norm=norm)
-                    sm_winter.set_array([])
-
-                    sm_autumn = plt.cm.ScalarMappable(cmap="autumn", norm=norm)
-                    sm_autumn.set_array([])
-
-                    cbar_winter = fig.colorbar(sm_winter, cax=ax_winter)
-                    cbar_autumn = fig.colorbar(sm_autumn, cax=ax_autumn)
-
-                    for cbar in [cbar_winter, cbar_autumn]:
-                        cbar.ax.set_yticks([])
-                        cbar.ax.set_frame_on(False)
-
-                    cbar_winter.ax.text(-1.55, 0.5, f"z-score (uncorr)",rotation=90, fontsize=6,va="center", ha="right", transform=cbar.ax.transAxes)
-                    cbar_winter.ax.text(0.5, -0.1, f"{stat_min:.1f}", fontsize=6,va="center", ha="right", transform=cbar.ax.transAxes)
-                    cbar_winter.ax.text(0.5, 1.1, f"{stat_max:.1f}", fontsize=6, va="center", ha="right", transform=cbar.ax.transAxes)
-                    
+            cbar.ax.text(-1.55, 0.5, f"z-score (uncorr)",rotation=90, fontsize=6,va="center", ha="right", transform=cbar.ax.transAxes)
+            cbar.ax.text(0.5, -0.1, f"{stat_min:.1f}", fontsize=6,va="center", ha="right", transform=cbar.ax.transAxes)
+            cbar.ax.text(0.5, 1.1, f"{stat_max:.1f}", fontsize=6, va="center", ha="right", transform=cbar.ax.transAxes)
 
             # --- Save figure ---
             fig.savefig(output_fname, dpi=300)
