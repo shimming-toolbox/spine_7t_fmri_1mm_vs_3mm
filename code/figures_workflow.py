@@ -116,6 +116,7 @@ try:
         titles=["3mm", "1mm smoothed"],
         task_name=tag,
         participant_ids=used_ids,
+        n_cols=4,
         verbose=True,
         redo=redo)
 except Exception as e:

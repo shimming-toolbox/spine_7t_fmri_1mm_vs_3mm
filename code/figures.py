@@ -85,7 +85,7 @@ class Figures_main:
             # on either side of every panel despite a small wspace/spacer.
             coronal_aspect = 220 / 70
             axial_aspect = 60 / 60
-            gap_ratio = 2.0
+            gap_ratio = 0.6
             spacer_ratio = 0.1
 
             height_ratios = []
@@ -178,18 +178,18 @@ class Figures_main:
                         # fraction of this axis's own width (transAxes).
                         x_center = 1.001
                         xmax_line = 2.001
-                        y_top = 1.25
+                        y_top = 1.1
                         if participant_ids is not None:
                             subj_label = participant_ids[subj_idx]
                         else:
                             subj_label = subj_idx + 1
-                        ax_cor.text(x_center, y_top, f"sub-{subj_label}", ha='center', va='bottom', fontsize=7, fontweight='black', transform=ax_cor.transAxes, fontname="Arial")
-                        line_y = 1.2
+                        ax_cor.text(x_center, y_top, f"sub-{subj_label}", ha='center', va='bottom', fontsize=8, fontweight='black', transform=ax_cor.transAxes, fontname="Arial")
+                        line_y = 1.08
                         ax_cor.hlines(y=line_y, xmin=0, xmax=xmax_line, colors='black', linewidth=0.8, transform=ax_cor.transAxes, clip_on=False)
 
-                        ax_cor.set_title(titles[0], color="black",  fontsize=5, fontname="Arial", y=0.97)
+                        ax_cor.set_title(titles[0], color="black",  fontsize=6, fontname="Arial", y=0.99)
                     if map_idx == 1:
-                        ax_cor.set_title(titles[1], color="black",  fontsize=5, fontname="Arial", y=0.97)
+                        ax_cor.set_title(titles[1], color="black",  fontsize=6, fontname="Arial", y=0.99)
 
                     # Orientation labels only for first participant
                     if subj_idx == 0 and map_idx == 0:
@@ -243,9 +243,9 @@ class Figures_main:
 
             # Label sits above the colorbar (horizontal, not rotated) so it can't collide
             # with the last participant's title, regardless of figure width/subject count.
-            cbar.ax.text(0.5, 1.3, "t-value\n(uncorr)", fontsize=6, va="bottom", ha="center", transform=cbar.ax.transAxes)
-            cbar.ax.text(0.5, -0.1, f"{stat_min:.1f}", fontsize=6,va="center", ha="right", transform=cbar.ax.transAxes)
-            cbar.ax.text(0.5, 1.1, f"{stat_max:.1f}", fontsize=6, va="center", ha="right", transform=cbar.ax.transAxes)
+            cbar.ax.text(0.8, 1.3, "t-score\n(uncorrected)", fontsize=7, va="bottom", ha="center", transform=cbar.ax.transAxes)
+            cbar.ax.text(0.9, -0.1, f"{stat_min:.1f}", fontsize=7,va="center", ha="right", transform=cbar.ax.transAxes)
+            cbar.ax.text(0.9, 1.1, f"{stat_max:.1f}", fontsize=7, va="center", ha="right", transform=cbar.ax.transAxes)
 
             # --- Save figure ---
             fig.savefig(output_fname, dpi=600)
