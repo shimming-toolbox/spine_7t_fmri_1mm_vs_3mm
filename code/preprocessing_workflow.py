@@ -186,6 +186,15 @@ def epi_full_processing(ID, func_file, tag, manual_centerline, warpT2w_PAM50_fil
                                                   redo=redo,
                                                   redo_qc=redo,  # should be true if you have done manual correction
                                                   verbose=verbose)
+    preprocess_Sc.segmentation(ID=ID,
+                               i_img=moco_mean_f,
+                               task_name=tag,contrast_anat="t2s",
+                               img_type="func",
+                               tissue="csf",
+                               redo_qc=redo, # should be true if you have done manual correction
+                               redo=redo,
+                               verbose=verbose)
+
 
     print(f'=== Func segmentation : Done  {ID} {tag} {run_name} ===', flush=True)
 
