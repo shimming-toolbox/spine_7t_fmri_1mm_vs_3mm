@@ -205,7 +205,7 @@ print("Number of Participant included : ", len(IDs), flush=True)
 print("===================================", flush=True)
 print("")
 
-common_mask_fname = os.path.join(first_level_dir.split("sub")[0], "common_mask_PAM50.nii.gz").format("glm")
+common_mask_fname = os.path.join(path_code,"template",config["PAM50_cord_2ndlevel"])
 
 import time as _time
 
