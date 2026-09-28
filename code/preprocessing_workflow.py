@@ -296,6 +296,10 @@ def epi_derive_seg_from_rest(ID, rest_tag, func_file, tag, params_moco, o_dir, r
         cmd_apply = (f"sct_apply_transfo -i {rest_sc_seg} -d {moco_mean_f}"
                      f" -w {warp_rest2motor} -o {motor_sc_seg} -x nn -v 0")
         os.system(cmd_apply)
+    
+    cmd_qc = f"sct_qc -i {moco_mean_f} -s {motor_sc_seg} -p sct_deepseg_sc -qc {preprocess_Sc.qc_dir} -qc-subject sub-{ID} -v 0"
+    os.system(cmd_qc)
+
     print(f'=== Derived seg from REST: Done  {ID} {tag} {run_name} ===', flush=True)
 
     # Compose PAM50<->MOTOR warp files from REST's PAM50 warp + REST<->MOTOR registration.
