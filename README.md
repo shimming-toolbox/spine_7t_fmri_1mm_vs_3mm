@@ -104,8 +104,9 @@ Prefer to browse the dataset first, or download it without DataLad? See https://
 
 The pipeline consists of four sequential steps run via a single shell script:
 
-```
-preprocess  →  firstlevel  →  secondlevel  →  figures
+```mermaid
+flowchart LR
+    A["<b>1. Preprocessing</b><br/><code>--preprocess</code>"] --> B["<b>2. First-level</b><br/><code>--firstlevel</code>"] --> C["<b>3. Second-level</b><br/><code>--secondlevel</code>"] --> D["<b>4. Figures</b><br/><code>--figures</code>"]
 ```
 
 ### Run the full pipeline
