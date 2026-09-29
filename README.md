@@ -10,15 +10,57 @@ Processing of spinal cord functional data acquired at 7T, comparing 1mm vs 3mm i
 
 ### Set up your project paths
 
-Create a folder that will contain the code and data, then define the variable in your shell:
+Create a folder that will contain the code and data, then define the variables in your shell:
 
 ```bash
 export PATH_PROJECT=<PATH_TO_PROJECT>
+export PATH_DATA="${PATH_PROJECT}/ds007932"
+export PATH_CODE="${PATH_PROJECT}/spine_7t_fmri_1mm_vs_3mm"
 ```
+
+### Clone repository
+
+```bash
+git clone https://github.com/shimming-toolbox/spine_7t_fmri_1mm_vs_3mm.git "${PATH_CODE}"
+```
+
+### Dependencies 🔗
+
+#### External dependencies
+
+- **Spinal Cord Toolbox** — this pipeline relies on the `-qc-contrast` option added by [spinalcordtoolbox/spinalcordtoolbox#5244](https://github.com/spinalcordtoolbox/spinalcordtoolbox/pull/5244). That PR merged into `master` on 2026-09-29, but hasn't shipped in a release yet — the latest is [v7.3](https://github.com/spinalcordtoolbox/spinalcordtoolbox/releases/tag/7.3) (published 2026-05-09, before the merge). Until the next release, install SCT from source on `master` instead of following the standard [installation guide](https://spinalcordtoolbox.com/en/latest/user_section/installation.html):
+  ```bash
+  git clone https://github.com/spinalcordtoolbox/spinalcordtoolbox.git
+  cd spinalcordtoolbox
+  ./install_sct
+  ```
+  (tracked in [#104](https://github.com/shimming-toolbox/spine_7t_fmri_1mm_vs_3mm/issues/104) — once a release includes this fix, this note goes away and a released SCT version is enough)
+- [FSL](https://fsl.fmrib.ox.ac.uk/fsl/fslwiki/FslInstallation)
+- [Conda](https://docs.conda.io/projects/conda/en/latest/user-guide/install/index.html)
+
+#### Setup the conda environment
+
+```bash
+conda create --name spine_7T_env_py10 python=3.10
+conda activate spine_7T_env_py10
+conda install -c conda-forge datalad
+pip install -r "${PATH_CODE}/config/requirements.txt"
+```
+
+`datalad` (installed above via conda-forge, which also pulls in the `git-annex` binary it needs) is used below to fetch the dataset from OpenNeuro.
 
 ### Download data 📀
 
-See: https://openneuro.org/datasets/ds007932/download
+With the conda environment above active:
+```bash
+datalad clone https://github.com/OpenNeuroDatasets/ds007932.git "${PATH_DATA}"
+cd "${PATH_DATA}" && datalad get . && cd -
+```
+
+> [!NOTE]
+> `datalad clone` sets up the dataset layout with lightweight placeholder files; `datalad get .` then downloads the actual file content (raw data + derivatives — several GB, so this can take a while). Re-running `datalad get .` later is safe and only fetches what's missing.
+
+Prefer to browse the dataset first, or download it without DataLad? See https://openneuro.org/datasets/ds007932/download.
 
 <details>
 <summary>Files are organized according to the BIDS standard.</summary>
@@ -55,63 +97,26 @@ See: https://openneuro.org/datasets/ds007932/download
 
 </details>
 
-Define variables:
-```bash
-export PATH_DATA="${PATH_PROJECT}/ds007932"
-export PATH_CODE="${PATH_PROJECT}/spine_7t_fmri_1mm_vs_3mm"
-```
-
-### Clone repository
-
-```bash
-git clone https://github.com/shimming-toolbox/spine_7t_fmri_1mm_vs_3mm.git "${PATH_CODE}"
-```
-
-### Dependencies 🔗
-
-#### External dependencies
-
-- [Spinal Cord Toolbox v7.2](https://spinalcordtoolbox.com/en/latest/user_section/installation.html)
-- [FSL](https://fsl.fmrib.ox.ac.uk/fsl/fslwiki/FslInstallation)
-- [Conda](https://docs.conda.io/projects/conda/en/latest/user-guide/install/index.html)
-
-#### Setup the conda environment
-
-```bash
-conda create --name spine_7T_env_py10 python=3.10
-conda activate spine_7T_env_py10
-pip install -r "${PATH_CODE}/config/requirements.txt"
-```
-
 ---
 
 ## Analysis Pipeline ⚙️
 
 The pipeline consists of four sequential steps run via a single shell script:
 
-```
-preprocess  →  firstlevel  →  secondlevel  →  figures
+```mermaid
+flowchart LR
+    A["<b>1. Preprocessing</b><br/><code>--preprocess</code>"] --> B["<b>2. First-level</b><br/><code>--firstlevel</code>"] --> C["<b>3. Second-level</b><br/><code>--secondlevel</code>"] --> D["<b>4. Figures</b><br/><code>--figures</code>"]
 ```
 
 ### Run the full pipeline
 
 ```bash
-bash "${PATH_CODE}/code/run_all_processing.sh" \
-  --path-data "${PATH_DATA}" \
-  --path-code "${PATH_CODE}" \
-  --preprocess --firstlevel --secondlevel --figures
+bash "${PATH_CODE}/code/run_all_processing.sh" --path-data "${PATH_DATA}" --path-code "${PATH_CODE}" --preprocess --firstlevel --secondlevel --figures
 ```
 
-> [!NOTE]
-> Do not restrict to `--tasks motor` here. Some acquisitions (shimBase+3mm, shimBase+1mm+sms2) were collected during the **rest** task and are needed for tSNR comparisons.
-
-To process a subset of subjects, add `--ids`:
+To process a subset of subjects, add `--ids` (valid IDs are those listed in `config/participants.tsv`; sub-099 is excluded from the analysis — see [#95](https://github.com/shimming-toolbox/spine_7t_fmri_1mm_vs_3mm/issues/95) — and passing it will error out):
 ```bash
-bash "${PATH_CODE}/code/run_all_processing.sh" \
-  --path-data "${PATH_DATA}" \
-  --path-code "${PATH_CODE}" \
-  --ids 099 100 101 \
-  --preprocess --firstlevel --secondlevel --figures
+bash "${PATH_CODE}/code/run_all_processing.sh" --path-data "${PATH_DATA}" --path-code "${PATH_CODE}" --ids 100 101 102 --preprocess --firstlevel --secondlevel --figures
 ```
 
 Use `--redo` to force rerunning all steps even if outputs already exist. By default, existing outputs are reused.
@@ -187,9 +192,7 @@ The 1mm data is z-smoothed with a Gaussian kernel to match the 3mm point spread 
 </details>
 
 ```bash
-bash "${PATH_CODE}/code/run_all_processing.sh" \
-  --path-data "${PATH_DATA}" --path-code "${PATH_CODE}" \
-  --tasks motor --preprocess
+bash "${PATH_CODE}/code/run_all_processing.sh" --path-data "${PATH_DATA}" --path-code "${PATH_CODE}" --tasks motor --preprocess
 ```
 
 <details>
@@ -222,11 +225,7 @@ Unlike `export_manual_correction.py`, this does not copy any files — it just r
 Alongside `cohort.csv`, it also writes a `cohort.json` sidecar (same basename, `.json` extension). This isn't optional: without it, slicer-cart silently resets its internal case/resource maps on load and the task cannot start (see [neuropoly/slicer-cart#201](https://github.com/neuropoly/slicer-cart/issues/201)). **Keep the `.json` file next to the `.csv` file** whenever you move, copy, or share the cohort.
 
 ```bash
-python "${PATH_CODE}/code/generate_slicercart_cohort.py" \
-  --path-data "${PATH_DATA}" \
-  --output cohort.csv \
-  --exclude task-motor \
-  --no-seg
+python "${PATH_CODE}/code/generate_slicercart_cohort.py" --path-data "${PATH_DATA}" --output cohort.csv --exclude task-motor --no-seg
 ```
 
 | Flag | Description |
@@ -272,9 +271,7 @@ Runs `firstlevel_workflow.py`. For each subject and acquisition:
 3. Generate the EPI comparison figure across shimming conditions
 
 ```bash
-bash "${PATH_CODE}/code/run_all_processing.sh" \
-  --path-data "${PATH_DATA}" --path-code "${PATH_CODE}" \
-  --tasks motor --firstlevel
+bash "${PATH_CODE}/code/run_all_processing.sh" --path-data "${PATH_DATA}" --path-code "${PATH_CODE}" --tasks motor --firstlevel
 ```
 
 ---
@@ -290,9 +287,7 @@ Runs `secondlevel_workflow.py`. Across subjects:
 5. Intraclass correlation coefficient (ICC) for test-retest reproducibility
 
 ```bash
-bash "${PATH_CODE}/code/run_all_processing.sh" \
-  --path-data "${PATH_DATA}" --path-code "${PATH_CODE}" \
-  --tasks motor --secondlevel
+bash "${PATH_CODE}/code/run_all_processing.sh" --path-data "${PATH_DATA}" --path-code "${PATH_CODE}" --tasks motor --secondlevel
 ```
 
 Two optional flags control the permutation test speed vs. precision trade-off:
@@ -304,9 +299,7 @@ Two optional flags control the permutation test speed vs. precision trade-off:
 
 Example for a high-precision run:
 ```bash
-bash "${PATH_CODE}/code/run_all_processing.sh" \
-  --path-data "${PATH_DATA}" --path-code "${PATH_CODE}" \
-  --tasks motor --secondlevel --n-perm 10000 --n-jobs 10
+bash "${PATH_CODE}/code/run_all_processing.sh" --path-data "${PATH_DATA}" --path-code "${PATH_CODE}" --tasks motor --secondlevel --n-perm 10000 --n-jobs 10
 ```
 
 ---
@@ -316,7 +309,5 @@ bash "${PATH_CODE}/code/run_all_processing.sh" \
 Runs `figures_workflow.py`. Generates all figures from the processed data.
 
 ```bash
-bash "${PATH_CODE}/code/run_all_processing.sh" \
-  --path-data "${PATH_DATA}" --path-code "${PATH_CODE}" \
-  --figures
+bash "${PATH_CODE}/code/run_all_processing.sh" --path-data "${PATH_DATA}" --path-code "${PATH_CODE}" --figures
 ```
