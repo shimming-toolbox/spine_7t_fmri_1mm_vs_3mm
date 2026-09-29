@@ -256,7 +256,7 @@ def epi_derive_seg_from_rest(ID, rest_tag, func_file, tag, params_moco, o_dir, r
     if not os.path.exists(warp_rest2motor) or not os.path.exists(warp_motor2rest) or redo:
         cmd_reg = (f"sct_register_multimodal -i {rest_moco_mean} -d {moco_mean_f}"
                    f" -dseg {mask_sc_file}"
-                   f" -param step=1,type=im,algo=affine,metric=CC -ofolder {reg_dir}"
+                   f" -param step=1,type=im,algo=affine,metric=CC,slicewise=1 -ofolder {reg_dir}"
                    f" -qc {preprocess_Sc.qc_dir} -qc-subject sub-{ID} -qc-contrast {tag} -v 0")
         os.system(cmd_reg)
         # sct_register_multimodal names warps after src/dest basenames
