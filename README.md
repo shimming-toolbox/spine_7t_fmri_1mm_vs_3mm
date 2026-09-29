@@ -28,14 +28,13 @@ git clone https://github.com/shimming-toolbox/spine_7t_fmri_1mm_vs_3mm.git "${PA
 
 #### External dependencies
 
-- **Spinal Cord Toolbox** — this pipeline relies on the `-qc-contrast` option added by [spinalcordtoolbox/spinalcordtoolbox#5244](https://github.com/spinalcordtoolbox/spinalcordtoolbox/pull/5244), which is not yet in a released version (not in v7.2). Until that PR is merged, install SCT from source on the `fix/qc-contrast-override` branch instead of following the standard [installation guide](https://spinalcordtoolbox.com/en/latest/user_section/installation.html):
+- **Spinal Cord Toolbox** — this pipeline relies on the `-qc-contrast` option added by [spinalcordtoolbox/spinalcordtoolbox#5244](https://github.com/spinalcordtoolbox/spinalcordtoolbox/pull/5244). That PR merged into `master` on 2026-09-29, but hasn't shipped in a release yet — the latest is [v7.3](https://github.com/spinalcordtoolbox/spinalcordtoolbox/releases/tag/7.3) (published 2026-05-09, before the merge). Until the next release, install SCT from source on `master` instead of following the standard [installation guide](https://spinalcordtoolbox.com/en/latest/user_section/installation.html):
   ```bash
   git clone https://github.com/spinalcordtoolbox/spinalcordtoolbox.git
   cd spinalcordtoolbox
-  git checkout fix/qc-contrast-override
   ./install_sct
   ```
-  (tracked in [#104](https://github.com/shimming-toolbox/spine_7t_fmri_1mm_vs_3mm/issues/104) — once merged, this note goes away and a released SCT version is enough)
+  (tracked in [#104](https://github.com/shimming-toolbox/spine_7t_fmri_1mm_vs_3mm/issues/104) — once a release includes this fix, this note goes away and a released SCT version is enough)
 - [FSL](https://fsl.fmrib.ox.ac.uk/fsl/fslwiki/FslInstallation)
 - [Conda](https://docs.conda.io/projects/conda/en/latest/user-guide/install/index.html)
 
