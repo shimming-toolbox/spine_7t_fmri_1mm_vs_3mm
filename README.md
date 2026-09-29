@@ -10,15 +10,58 @@ Processing of spinal cord functional data acquired at 7T, comparing 1mm vs 3mm i
 
 ### Set up your project paths
 
-Create a folder that will contain the code and data, then define the variable in your shell:
+Create a folder that will contain the code and data, then define the variables in your shell:
 
 ```bash
 export PATH_PROJECT=<PATH_TO_PROJECT>
+export PATH_DATA="${PATH_PROJECT}/ds007932"
+export PATH_CODE="${PATH_PROJECT}/spine_7t_fmri_1mm_vs_3mm"
 ```
+
+### Clone repository
+
+```bash
+git clone https://github.com/shimming-toolbox/spine_7t_fmri_1mm_vs_3mm.git "${PATH_CODE}"
+```
+
+### Dependencies 🔗
+
+#### External dependencies
+
+- **Spinal Cord Toolbox** — this pipeline relies on the `-qc-contrast` option added by [spinalcordtoolbox/spinalcordtoolbox#5244](https://github.com/spinalcordtoolbox/spinalcordtoolbox/pull/5244), which is not yet in a released version (not in v7.2). Until that PR is merged, install SCT from source on the `fix/qc-contrast-override` branch instead of following the standard [installation guide](https://spinalcordtoolbox.com/en/latest/user_section/installation.html):
+  ```bash
+  git clone https://github.com/spinalcordtoolbox/spinalcordtoolbox.git
+  cd spinalcordtoolbox
+  git checkout fix/qc-contrast-override
+  ./install_sct
+  ```
+  (tracked in [#104](https://github.com/shimming-toolbox/spine_7t_fmri_1mm_vs_3mm/issues/104) — once merged, this note goes away and a released SCT version is enough)
+- [FSL](https://fsl.fmrib.ox.ac.uk/fsl/fslwiki/FslInstallation)
+- [Conda](https://docs.conda.io/projects/conda/en/latest/user-guide/install/index.html)
+
+#### Setup the conda environment
+
+```bash
+conda create --name spine_7T_env_py10 python=3.10
+conda activate spine_7T_env_py10
+conda install -c conda-forge datalad
+pip install -r "${PATH_CODE}/config/requirements.txt"
+```
+
+`datalad` (installed above via conda-forge, which also pulls in the `git-annex` binary it needs) is used below to fetch the dataset from OpenNeuro.
 
 ### Download data 📀
 
-See: https://openneuro.org/datasets/ds007932/download
+With the conda environment above active:
+```bash
+datalad clone https://github.com/OpenNeuroDatasets/ds007932.git "${PATH_DATA}"
+cd "${PATH_DATA}" && datalad get . && cd -
+```
+
+> [!NOTE]
+> `datalad clone` sets up the dataset layout with lightweight placeholder files; `datalad get .` then downloads the actual file content (raw data + derivatives — several GB, so this can take a while). Re-running `datalad get .` later is safe and only fetches what's missing.
+
+Prefer to browse the dataset first, or download it without DataLad? See https://openneuro.org/datasets/ds007932/download.
 
 <details>
 <summary>Files are organized according to the BIDS standard.</summary>
@@ -54,41 +97,6 @@ See: https://openneuro.org/datasets/ds007932/download
 ```
 
 </details>
-
-Define variables:
-```bash
-export PATH_DATA="${PATH_PROJECT}/ds007932"
-export PATH_CODE="${PATH_PROJECT}/spine_7t_fmri_1mm_vs_3mm"
-```
-
-### Clone repository
-
-```bash
-git clone https://github.com/shimming-toolbox/spine_7t_fmri_1mm_vs_3mm.git "${PATH_CODE}"
-```
-
-### Dependencies 🔗
-
-#### External dependencies
-
-- **Spinal Cord Toolbox** — this pipeline relies on the `-qc-contrast` option added by [spinalcordtoolbox/spinalcordtoolbox#5244](https://github.com/spinalcordtoolbox/spinalcordtoolbox/pull/5244), which is not yet in a released version (not in v7.2). Until that PR is merged, install SCT from source on the `fix/qc-contrast-override` branch instead of following the standard [installation guide](https://spinalcordtoolbox.com/en/latest/user_section/installation.html):
-  ```bash
-  git clone https://github.com/spinalcordtoolbox/spinalcordtoolbox.git
-  cd spinalcordtoolbox
-  git checkout fix/qc-contrast-override
-  ./install_sct
-  ```
-  (tracked in [#104](https://github.com/shimming-toolbox/spine_7t_fmri_1mm_vs_3mm/issues/104) — once merged, this note goes away and a released SCT version is enough)
-- [FSL](https://fsl.fmrib.ox.ac.uk/fsl/fslwiki/FslInstallation)
-- [Conda](https://docs.conda.io/projects/conda/en/latest/user-guide/install/index.html)
-
-#### Setup the conda environment
-
-```bash
-conda create --name spine_7T_env_py10 python=3.10
-conda activate spine_7T_env_py10
-pip install -r "${PATH_CODE}/config/requirements.txt"
-```
 
 ---
 
