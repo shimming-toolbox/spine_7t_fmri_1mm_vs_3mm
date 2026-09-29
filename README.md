@@ -114,9 +114,6 @@ flowchart LR
 bash "${PATH_CODE}/code/run_all_processing.sh" --path-data "${PATH_DATA}" --path-code "${PATH_CODE}" --preprocess --firstlevel --secondlevel --figures
 ```
 
-> [!NOTE]
-> Do not restrict to `--tasks motor` here. Some acquisitions (shimBase+3mm, shimBase+1mm+sms2) were collected during the **rest** task and are needed for tSNR comparisons.
-
 To process a subset of subjects, add `--ids` (valid IDs are those listed in `config/participants.tsv`; sub-099 is excluded from the analysis — see [#95](https://github.com/shimming-toolbox/spine_7t_fmri_1mm_vs_3mm/issues/95) — and passing it will error out):
 ```bash
 bash "${PATH_CODE}/code/run_all_processing.sh" --path-data "${PATH_DATA}" --path-code "${PATH_CODE}" --ids 100 101 102 --preprocess --firstlevel --secondlevel --figures
