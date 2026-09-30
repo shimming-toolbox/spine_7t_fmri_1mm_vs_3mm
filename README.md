@@ -99,6 +99,18 @@ Prefer to browse the dataset first, or download it without DataLad? See https://
 
 ---
 
+## Tests 🧪
+
+A small unit-test suite covers pipeline logic that can be checked without data or SCT
+binaries (SCT calls are stubbed out). Run it with the same Python the pipeline uses, since
+the modules under test import `nibabel`, `pandas` and `matplotlib`:
+
+```bash
+$SCT_DIR/python/envs/venv_sct/bin/python3 -m pytest tests/ -v
+```
+
+---
+
 ## Analysis Pipeline ⚙️
 
 The pipeline consists of four sequential steps run via a single shell script:
