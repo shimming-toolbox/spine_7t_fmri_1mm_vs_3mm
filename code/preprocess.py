@@ -174,6 +174,17 @@ class Preprocess_Sc:
         """
         This function creates a mask around a spinal cord centerline.
 
+        If a manually drawn centerline exists under `derivatives/manual/` for this image, it takes
+        precedence over the automatically computed one and the mask is rebuilt from it.
+
+        TODO (#73): this whole function is expected to become unnecessary. It exists only because
+        moco-dl needs to be told where the cord is (`sct_fmri_moco -m`). Once #73 lands with a
+        model that localises the cord itself via SCT's automatic `sc-crop` pipeline, the mask —
+        and the centerline, and the manual-correction handling below — can go. Note the mask has
+        three other consumers besides moco (`mask_qc` for the moco QC plot, and `-dseg` for the
+        REST->MOTOR registration in preprocessing_workflow.py), so removal is not a pure deletion;
+        those will need a real cord segmentation instead.
+
         References:
         -----------
         - https://spinalcordtoolbox.com/user_section/command-line.html#sct-get-centerline
@@ -223,7 +234,10 @@ class Preprocess_Sc:
         # --- Define method and output folder ----------------------------------------------
         if manual:
             method = "viewer"
-            o_folder = os.path.join(self.manual_dir, f"sub-{ID}", "{ses_name}", "func")
+            # NB: ses_name (not the literal string "{ses_name}") — with the literal, manual=True
+            # wrote the centerline to a directory named '{ses_name}', where the manual-centerline
+            # lookup below never looks for it.
+            o_folder = os.path.join(self.manual_dir, f"sub-{ID}", ses_name, "func")
         else:
             method = "optic"
             if o_folder is None : # gave the default folder name if not provided
@@ -237,11 +251,30 @@ class Preprocess_Sc:
         os.makedirs(os.path.join(mask_o_folder, self.structure), exist_ok=True)
         mask_f = os.path.join(mask_o_folder, self.structure, os.path.basename(i_img).split(".")[0] + "_mask.nii.gz")  # output mask filename
 
+        # --- Resolve which centerline to use ----------------------------------------------
+        # A manually drawn centerline takes precedence over the automatic one. This lookup must
+        # happen *before* sct_create_mask runs, otherwise the mask is built from the automatic
+        # centerline and the manual correction never reaches moco (see issue #113).
+        manual_file = os.path.join(self.manual_dir, f"sub-{ID}", ses_name, "func", os.path.basename(i_img).split(".")[0] + "_centerline.nii.gz")
+        use_manual_centerline = os.path.exists(manual_file)
+
         # --- Compute centerline -----------------------------------------------------------
+        # Still computed even when a manual centerline exists: it is cheap and its QC report is
+        # what the reviewer compares the manual correction against.
         if not os.path.exists(centerline_f + ".nii.gz") or redo_ctrl:
             print(f"Centerline for sub-{ID}")
             cmd_centerline=f"sct_get_centerline -i {i_img} -o {centerline_f} -c t1 -method {method} -centerline-algo bspline -qc {self.qc_dir} -qc-subject sub-{ID} -qc-contrast {task_name or 'anat'} -v 0"
             os.system(cmd_centerline)
+
+        if use_manual_centerline:
+            centerline_f = manual_file.split(".nii.gz")[0]
+            print(f"⚠ A manual centerline file exists: {manual_file}")
+            print("The manual centerline is prioritized. Remove it to use the automatic version.")
+            # An existing mask carries no record of which centerline produced it, so it may be a
+            # stale one built from the automatic centerline (mtime is no help: the manual file is
+            # typically older than the mask). sct_create_mask takes ~1 s, so rebuild rather than
+            # risk silently reusing a mask derived from the centerline we just rejected.
+            redo_mask = True
 
         # --- Create mask around centerline ------------------------------------------------
         if not os.path.exists(mask_f) or redo_mask:
@@ -260,24 +293,17 @@ class Preprocess_Sc:
             )
 
         # --- QC handling -----------------------------------------------------------------
-        manual_file = os.path.join(self.manual_dir, f"sub-{ID}", ses_name, "func", os.path.basename(i_img).split(".")[0] + "_centerline.nii.gz")
-
-        if os.path.exists(manual_file):
-            centerline_f = manual_file.split(".nii.gz")[0]
-            print(f"⚠ A manual centerline file exists: {manual_file}")
-            print("The manual centerline is prioritized. Remove it to use the automatic version.")
-
-            if manual and redo_ctrl:
-                print("Running QC for manual centerline...")
-                cmd_qc = f"sct_qc -i {i_img} -s {centerline_f}.nii.gz -p sct_get_centerline -qc {self.qc_dir } -qc-subject sub-{ID} -qc-contrast {task_name or 'anat'} -v 0"
-                os.system(cmd_qc)
+        if use_manual_centerline and manual and redo_ctrl:
+            print("Running QC for manual centerline...")
+            cmd_qc = f"sct_qc -i {i_img} -s {centerline_f}.nii.gz -p sct_get_centerline -qc {self.qc_dir } -qc-subject sub-{ID} -qc-contrast {task_name or 'anat'} -v 0"
+            os.system(cmd_qc)
 
         # --- Generate QC plot -------------------------------------------------------------
         if verbose:
             qc_indiv_path = os.path.join(self.qc_dir, f"sub-{ID}", "func", ses_name, task_name, "sct_get_centerline")
             self._plot_qc(ID=ID, ses_name=ses_name, task_name=task_name, tag="centerline", qc_indiv_path=qc_indiv_path, fig_size=(15,15),alpha=0.8)
 
-            if not os.path.exists(manual_file):
+            if not use_manual_centerline:
                 print("If manual corrections are needed, set:")
                 print("manual=True, redo_ctrl=True, redo_mask=True")
                 print("⚠ Ensure the centerline starts at the first slice.")

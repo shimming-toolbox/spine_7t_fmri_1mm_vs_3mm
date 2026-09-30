@@ -36,3 +36,5 @@ code/spm/
 
 # Ignore IDE files
 .idea
+# pytest cache
+.pytest_cache/
