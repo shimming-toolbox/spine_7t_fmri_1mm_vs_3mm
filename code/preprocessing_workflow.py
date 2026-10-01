@@ -186,6 +186,15 @@ def epi_full_processing(ID, func_file, tag, manual_centerline, warpT2w_PAM50_fil
                                                   redo=redo,
                                                   redo_qc=redo,  # should be true if you have done manual correction
                                                   verbose=verbose)
+    preprocess_Sc.segmentation(ID=ID,
+                               i_img=moco_mean_f,
+                               task_name=tag,contrast_anat="t2s",
+                               img_type="func",
+                               tissue="csf",
+                               redo_qc=redo, # should be true if you have done manual correction
+                               redo=redo,
+                               verbose=verbose)
+
 
     print(f'=== Func segmentation : Done  {ID} {tag} {run_name} ===', flush=True)
 
@@ -206,6 +215,7 @@ def epi_full_processing(ID, func_file, tag, manual_centerline, warpT2w_PAM50_fil
 
     # Copy the segmentation and warping field to where the final files are expected to be
     copy_segmentation_from_ref_tag(ID, tag, tag, manual_dir, preprocessing_dir)
+    copy_segmentation_from_ref_tag(ID, tag, tag, manual_dir, preprocessing_dir,label="CSF")
     copy_warping_fields_from_ref_tag(ID, tag, tag, preprocessing_dir)
 
 
@@ -232,6 +242,17 @@ def epi_derive_seg_from_rest(ID, rest_tag, func_file, tag, params_moco, o_dir, r
                                                       redo=redo,
                                                       use_dl=True)
     print(f'=== Moco : Done  {ID} {tag} {run_name} ===', flush=True)
+
+    preprocess_Sc.segmentation(ID=ID,
+                                   i_img=moco_mean_f,
+                                   task_name=tag,contrast_anat="t2s",
+                                   img_type="func",
+                                   tissue="csf",
+                                   redo_qc=redo, # should be true if you have done manual correction
+                                   redo=redo,
+                                   verbose=verbose)
+
+    copy_segmentation_from_ref_tag(ID, tag, tag, manual_dir, preprocessing_dir,label="CSF")
 
     # Destripe (correct even/odd slice AP jitter from SMS). MOTOR is registered to REST
     # below, so it must be destriped too, same as REST, or the registration is degraded
@@ -275,6 +296,10 @@ def epi_derive_seg_from_rest(ID, rest_tag, func_file, tag, params_moco, o_dir, r
         cmd_apply = (f"sct_apply_transfo -i {rest_sc_seg} -d {moco_mean_f}"
                      f" -w {warp_rest2motor} -o {motor_sc_seg} -x nn -v 0")
         os.system(cmd_apply)
+    
+    cmd_qc = f"sct_qc -i {moco_mean_f} -s {motor_sc_seg} -p sct_deepseg_sc -qc {preprocess_Sc.qc_dir} -qc-subject sub-{ID} -v 0"
+    os.system(cmd_qc)
+
     print(f'=== Derived seg from REST: Done  {ID} {tag} {run_name} ===', flush=True)
 
     # Compose PAM50<->MOTOR warp files from REST's PAM50 warp + REST<->MOTOR registration.

@@ -16,6 +16,7 @@
 import re, json, sys, os, glob, argparse
 import pandas as pd
 from nilearn.glm import threshold_stats_img
+from nilearn import image
 import nibabel as nib
 import numpy as np
 
@@ -134,6 +135,7 @@ for ID_nb, ID in enumerate(IDs):
                                                           mask_file=cord_seg_file,
                                                           task_name=tag,
                                                           run_name=run_name,
+                                                          smoothing_fwhm=None,
                                                           redo=redo,
                                                           verbose=verbose)
 
@@ -189,15 +191,20 @@ for ID_nb, ID in enumerate(IDs):
             tag = "task-" + task_name + "_acq-" + derived_acq_name
             tag_source = "task-" + task_name + "_acq-" + source_acq
 
-            # Moco file (pick longest run if multiple exist)
-            moco_candidates = sorted(glob.glob(os.path.join(
-                preprocessing_dir.format(ID), 'func', tag,
-                'sct_fmri_moco', f'sub-{ID}_{tag}*_bold_moco.nii.gz'
-            )))
-            if not moco_candidates:
-                print(f"INFO: No moco file for sub-{ID} {tag}, skipping.", flush=True)
-                continue
-            denoised_fmri = max(moco_candidates, key=lambda f: nib.load(f).shape[3])
+            denoised_candidates = glob.glob(os.path.join(denoising_dir.format(ID), tag, config["denoising"]["denoised_dir"],"*"+run_name+"*_nostd_s.nii.gz"))
+            if denoised_candidates:
+                denoised_fmri = denoised_candidates[0]
+
+            else:
+                # Moco file (pick longest run if multiple exist)
+                moco_candidates = sorted(glob.glob(os.path.join(
+                    preprocessing_dir.format(ID), 'func', tag,
+                    'sct_fmri_moco', f'sub-{ID}_{tag}*_bold_moco.nii.gz'
+                )))
+                if not moco_candidates:
+                    print(f"INFO: No moco file for sub-{ID} {tag}, skipping.", flush=True)
+                    continue
+                denoised_fmri = max(moco_candidates, key=lambda f: nib.load(f).shape[3])
 
             match = re.search(r"_?(run-\d+)", denoised_fmri)
             run_name = match.group(1) if match else ""
@@ -249,7 +256,7 @@ for ID_nb, ID in enumerate(IDs):
 
             stat_maps = glm_ana.run_first_level_glm(
                 ID=ID, i_fname=denoised_fmri, events_file=events_file,
-                mask_file=cord_seg_file, task_name=tag, run_name=run_name,
+                mask_file=cord_seg_file, task_name=tag, run_name=run_name,smoothing_fwhm=None,
                 redo=redo, verbose=verbose, tr=source_tr
             )
 
@@ -264,7 +271,7 @@ for ID_nb, ID in enumerate(IDs):
                     thresholded_map.to_filename(fname_thr_img)
 
             for i, contrast_fname in enumerate(stat_maps):
-                preprocess_Sc.apply_warp(
+                norm_stat_maps=preprocess_Sc.apply_warp(
                     i_img=[stat_maps[i]], ID=[ID],
                     o_folder=[os.path.dirname(stat_maps[i])],
                     dest_img=os.path.join(path_code, "template", config["PAM50_t2"]),

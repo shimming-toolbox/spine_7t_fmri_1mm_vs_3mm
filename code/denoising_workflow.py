@@ -20,6 +20,7 @@
 import json,sys, os, glob, re, argparse
 import pandas as pd
 from nilearn import image
+import utils
 
 # Get the environment variable PATH_CODE
 path_code = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -104,6 +105,7 @@ for ID_nb,ID in enumerate(IDs):
 
                 moco_file=glob.glob(os.path.join(preprocessing_dir.format(ID), config["preprocess_dir"]["func_moco"].format(tag), config["preprocess_f"]["func_moco"].format(ID,tag,run_name)))[0]
                 cord_seg_file = glob.glob(os.path.join(preprocessing_dir.format(ID), 'func',tag, config["preprocess_f"]["func_seg"].format(ID,tag,"")))[0]
+                print(os.path.join(preprocessing_dir.format(ID), 'func',tag, config["preprocess_f"]["func_csf"].format(ID,tag,"")))
                 csf_seg_file = glob.glob(os.path.join(preprocessing_dir.format(ID), 'func',tag, config["preprocess_f"]["func_csf"].format(ID,tag,"")))[0]
                 
                 if cord_seg_file is None:
@@ -185,15 +187,44 @@ for ID_nb,ID in enumerate(IDs):
                     standardize=False,
                     n_jobs=4,
                     redo=redo)
-                
+
+                #------------------------------------------------------------------
+                #------ Apply 3mm slices smoothing 
+                #------------------------------------------------------------------
+
+                if acq_name == "shimSlice+1mm+sms2":
+                    new_acq_tag="shimSlice+1mm+sms2+smooth3mm"
+
+                    # Create an output directory
+                    clean_dir=os.path.dirname(Clean_image_file)
+                    output_smooth3mm_dir = clean_dir.replace(f"acq-{acq_name}",f"acq-{new_acq_tag}")
+                    os.makedirs(output_smooth3mm_dir, exist_ok=True)
+                    Clean_image_file_3mmzsmooth = Clean_image_file.replace(acq_name,new_acq_tag)
+
+                    # Apply 3mm smoothing across slices
+                    utils.smooth_slices_img(i_img=Clean_image_file,
+                                            o_img=Clean_image_file_3mmzsmooth,
+                                            redo=redo, 
+                                            verbose=verbose)
+
                 #------------------------------------------------------------------
                 #------ Apply smoothing
                 #------------------------------------------------------------------
-                smooth_imag_file=Clean_image_file.split(".")[0] + "_s.nii.gz"
+                if acq_name == "shimSlice+1mm+sms2":
+                    smooth_imag_files=[Clean_image_file.split(".")[0] + "_s.nii.gz",Clean_image_file_3mmzsmooth.split(".")[0]+ "_s.nii.gz"]
+                    clean_imag_files=[Clean_image_file,Clean_image_file_3mmzsmooth]
+                    fwhm=[1.5,1.5,2]
+                else:
+                    smooth_imag_files=[Clean_image_file.split(".")[0] + "_s.nii.gz"]
+                    clean_imag_files=[Clean_image_file]
+                    fwhm=[1.5,1.5,6]
 
-                if not os.path.exists(smooth_imag_file):
-                    smoothed_image=image.smooth_img(Clean_image_file, [1.5,1.5,6])
-                    smoothed_image.to_filename(smooth_imag_file)
+                for i,smooth_imag_file in enumerate(smooth_imag_files):
+                    print(smooth_imag_file)
+                    print(clean_imag_files[i])
+                    if not os.path.exists(smooth_imag_file):
+                        smoothed_image=image.smooth_img(clean_imag_files[i], fwhm)
+                        smoothed_image.to_filename(smooth_imag_file)
                 
                 
 

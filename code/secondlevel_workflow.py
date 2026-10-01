@@ -212,19 +212,24 @@ import time as _time
 values_csv_pair={};metrics_csv_pair={}
 for cluster_corr in [0.01,0.001]:
     values_csv_pair[cluster_corr]={};metrics_csv_pair[cluster_corr]={}
-    for vox_thr in [0.005]:
+    for vox_thr in [0.05]:
         values_csv_pair[cluster_corr][vox_thr]=[];metrics_csv_pair[cluster_corr][vox_thr]=[]
         for task_name in ["motor"]:
             for acq_name in config["design_exp"]["acq_names"]:
+                
                 i_fnames=[]
                 tag = "task-" + task_name + "_acq-" + acq_name
                 for ID in IDs:
+                    tag = "task-" + task_name + "_acq-" + acq_name
                     raw_func = sorted(glob.glob(os.path.join(config["raw_dir"], f'sub-{ID}', 'func', f'sub-{ID}_{tag}_*bold.nii.gz')))
                     if not raw_func:
                         continue
                     match = re.search(r"_?(run-\d+)", raw_func[0])
                     run_name = match.group(1) if match else ""
+                    if acq_name == "shimSlice+1mm+sms2":
+                        tag = "task-" + task_name + "_acq-" + "shimSlice+1mm+sms2+smooth3mm"  # use the smoothed version for second-level GLM  
                     glm_matches = glob.glob(os.path.join(first_level_dir.format('glm',ID), f"{tag}", f"*{tag}*{run_name}*trial_RH-rest*inTemplate.nii.gz"))
+                    
                     if glm_matches:
                         i_fnames.append(glm_matches[0])
 

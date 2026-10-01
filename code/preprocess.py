@@ -1209,21 +1209,27 @@ class Preprocess_Sc:
         plt.show()
 
 
-def copy_segmentation_from_ref_tag(ID, tag, ref_tag, manual_dir, preprocessing_dir):
-
-    fname_dest = os.path.join(preprocessing_dir.format(ID), "func", tag, f"sub-{ID}_{tag}_bold_moco_mean_seg.nii.gz")
+def copy_segmentation_from_ref_tag(ID, tag, ref_tag, manual_dir, preprocessing_dir,label="SC"):
 
     # We need to copy either the manual segmentation file if it exists for the motor task, or the
     # automatic segmentation file if it doesn't
-    fname_ref_manual_seg_list = glob.glob(os.path.join(manual_dir, f"sub-{ID}", "func", f"sub-{ID}_{ref_tag}_*bold_moco_mean_label-SC_seg.nii.gz"))
-    fname_ref_auto_seg_list = glob.glob(os.path.join(preprocessing_dir.format(ID), "func", ref_tag, "sct_deepseg",
+    fname_ref_manual_seg_list = glob.glob(os.path.join(manual_dir, f"sub-{ID}", "func", f"sub-{ID}_{ref_tag}_*bold_moco_mean_*{label}_seg.nii.gz"))
+
+    if label=="SC":
+        fname_dest = os.path.join(preprocessing_dir.format(ID), "func", tag, f"sub-{ID}_{tag}_bold_moco_mean_seg.nii.gz")
+        fname_ref_auto_seg_list = glob.glob(os.path.join(preprocessing_dir.format(ID), "func", ref_tag, "sct_deepseg",
                                                      f"sub-{ID}_{ref_tag}_*bold_moco_mean_seg.nii.gz"))
+    elif "CSF":
+        fname_dest = os.path.join(preprocessing_dir.format(ID), "func", tag, f"sub-{ID}_{tag}_bold_moco_mean_CSF_seg.nii.gz")
+        fname_ref_auto_seg_list = glob.glob(os.path.join(preprocessing_dir.format(ID), "func", ref_tag, "sct_propseg",
+                                                             f"sub-{ID}_{ref_tag}_*bold_moco_mean_CSF_seg.nii.gz"))
+
     if len(fname_ref_manual_seg_list) > 0:
         fname_from = sorted(fname_ref_manual_seg_list)[0]  # Take run-01 (sorted list)
-        print(f'=== Copying manual segmentation file from {ref_tag} to {tag} for {ID} ===', flush=True)
+        print(f'=== Copying manual {label} segmentation file from {ref_tag} to {tag} for {ID} ===', flush=True)
     elif len(fname_ref_auto_seg_list) > 0:
         fname_from = sorted(fname_ref_auto_seg_list)[0]  # Take run-01 (sorted list)
-        print(f'=== Copying automatic segmentation file from {ref_tag} to {tag} for {ID} ===', flush=True)
+        print(f'=== Copying automatic {label} segmentation file from {ref_tag} to {tag} for {ID} ===', flush=True)
     else:
         raise RuntimeError(
             f'No segmentation file found for {ref_tag} in either manual or automatic folders for {ID}. Cannot copy segmentation file to {tag}.')
