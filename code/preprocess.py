@@ -29,6 +29,21 @@ def manual_label_filename(base_name, label):
     return base_name[: -len(suffix)] + f"_label-{label}_seg.nii.gz"
 
 
+def find_manual_sc_seg(ID, tag, manual_dir):
+    """Return the manual spinal cord segmentation for this subject/acquisition, or None.
+
+    Matches the convention used under derivatives/manual/, allowing for an optional `run-`
+    entity between the acquisition tag and the `_bold` suffix, e.g.
+    `sub-103_task-motor_acq-shimSlice+3mm_run-01_bold_moco_mean_label-SC_seg.nii.gz`.
+    When several runs are present the first is returned (sorted, i.e. run-01), matching
+    copy_segmentation_from_ref_tag().
+    """
+    matches = sorted(glob.glob(os.path.join(
+        manual_dir, f"sub-{ID}", "func",
+        f"sub-{ID}_{tag}_*bold_moco_mean_label-SC_seg.nii.gz")))
+    return matches[0] if matches else None
+
+
 #####################################################
 class Preprocess_main:
     """

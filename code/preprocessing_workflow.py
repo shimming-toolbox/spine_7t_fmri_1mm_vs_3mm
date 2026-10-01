@@ -32,7 +32,7 @@ import pandas as pd
 # get path of the parent location of this file, and go up one level
 path_code = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(os.path.join(path_code, "code"))  # Change this line according to your directory
-from preprocess import Preprocess_main, Preprocess_Sc, copy_warping_fields_from_ref_tag, copy_segmentation_from_ref_tag, manual_label_filename
+from preprocess import Preprocess_main, Preprocess_Sc, copy_warping_fields_from_ref_tag, copy_segmentation_from_ref_tag, manual_label_filename, find_manual_sc_seg
 import postprocess
 import utils
 
@@ -256,7 +256,7 @@ def epi_derive_seg_from_rest(ID, rest_tag, func_file, tag, params_moco, o_dir, r
     if not os.path.exists(warp_rest2motor) or not os.path.exists(warp_motor2rest) or redo:
         cmd_reg = (f"sct_register_multimodal -i {rest_moco_mean} -d {moco_mean_f}"
                    f" -dseg {mask_sc_file}"
-                   f" -param step=1,type=im,algo=affine,metric=CC -ofolder {reg_dir}"
+                   f" -param step=1,type=im,algo=affine,metric=CC,slicewise=1 -ofolder {reg_dir}"
                    f" -qc {preprocess_Sc.qc_dir} -qc-subject sub-{ID} -qc-contrast {tag} -v 0")
         os.system(cmd_reg)
         # sct_register_multimodal names warps after src/dest basenames
@@ -269,9 +269,19 @@ def epi_derive_seg_from_rest(ID, rest_tag, func_file, tag, params_moco, o_dir, r
         os.rename(fwd[0], warp_rest2motor)
         os.rename(inv[0], warp_motor2rest)
 
-    # Apply warp to REST SC segmentation -> MOTOR space
+    # Segmentation in MOTOR space: a manual MOTOR segmentation wins over the warped REST one.
+    # A segmentation drawn on the MOTOR cord itself is better than the REST segmentation pushed
+    # through the REST<->MOTOR registration, however good that registration is (#98). The check
+    # has to come *before* sct_apply_transfo, and the copy has to be unconditional: otherwise the
+    # warp overwrites the manual segmentation on every run and the correction never takes effect
+    # (same failure mode as the manual centerline in #113).
     motor_sc_seg = os.path.join(o_dir, f"sub-{ID}_{tag}_bold_moco_mean_seg.nii.gz")
-    if not os.path.exists(motor_sc_seg) or redo:
+    manual_motor_seg = find_manual_sc_seg(ID, tag, manual_dir)
+    if manual_motor_seg:
+        print(f'/!\\ Manual MOTOR segmentation detected, using it instead of the warped REST '
+              f'segmentation: {manual_motor_seg}', flush=True)
+        shutil.copy(manual_motor_seg, motor_sc_seg)
+    elif not os.path.exists(motor_sc_seg) or redo:
         cmd_apply = (f"sct_apply_transfo -i {rest_sc_seg} -d {moco_mean_f}"
                      f" -w {warp_rest2motor} -o {motor_sc_seg} -x nn -v 0")
         os.system(cmd_apply)
