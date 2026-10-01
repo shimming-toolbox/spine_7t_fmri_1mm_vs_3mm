@@ -20,6 +20,7 @@
 import json,sys, os, glob, re, argparse
 import pandas as pd
 from nilearn import image
+import utils
 
 # Get the environment variable PATH_CODE
 path_code = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -186,7 +187,26 @@ for ID_nb,ID in enumerate(IDs):
                     standardize=False,
                     n_jobs=4,
                     redo=redo)
-                
+
+                #------------------------------------------------------------------
+                #------ Apply 3mm slices smoothing 
+                #------------------------------------------------------------------
+
+                if acq_name == "shimSlice+1mm+sms2":
+                    new_acq_tag="shimSlice+1mm+sms2+smooth3mm"
+
+                    # Create an output directory
+                    clean_dir=os.path.dirname(Clean_image_file)
+                    output_smooth3mm_dir = clean_dir.replace(f"acq-{acq_name}",f"acq-{new_acq_tag}")
+                    os.makedirs(output_smooth3mm_dir, exist_ok=True)
+                    Clean_image_file_3mmzsmooth = Clean_image_file.replace(acq_name,new_acq_tag)
+
+                    # Apply 3mm smoothing across slices
+                    utils.smooth_slices_img(i_img=Clean_image_file,
+                                            o_img=Clean_image_file_3mmzsmooth,
+                                            redo=redo, 
+                                            verbose=verbose)
+
                 #------------------------------------------------------------------
                 #------ Apply smoothing
                 #------------------------------------------------------------------
