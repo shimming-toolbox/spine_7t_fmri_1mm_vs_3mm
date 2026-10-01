@@ -16,6 +16,7 @@
 import re, json, sys, os, glob, argparse
 import pandas as pd
 from nilearn.glm import threshold_stats_img
+from nilearn import image
 import nibabel as nib
 import numpy as np
 
@@ -104,7 +105,7 @@ for ID_nb, ID in enumerate(IDs):
                 else:
                     run_name=""
 
-                denoised_candidates = glob.glob(os.path.join(denoising_dir.format(ID), tag, config["denoising"]["denoised_dir"],"*"+run_name+"*_nostd.nii.gz"))
+                denoised_candidates = glob.glob(os.path.join(denoising_dir.format(ID), tag, config["denoising"]["denoised_dir"],"*"+run_name+"*_nostd_s.nii.gz"))
                 if denoised_candidates:
                     denoised_fmri = denoised_candidates[0]
                 else:
@@ -128,7 +129,6 @@ for ID_nb, ID in enumerate(IDs):
                 events_file=glob.glob(os.path.join(config["raw_dir"], f'sub-{ID}', 'func', f'sub-{ID}_{tag}_*{run_name}*events.tsv'))[0]
 
                 #------ I.2 Run first level GLM
-                print(denoised_fmri)
                 stat_maps=glm_ana.run_first_level_glm(ID=ID,
                                                           i_fname=denoised_fmri,
                                                           events_file=events_file,
@@ -191,7 +191,7 @@ for ID_nb, ID in enumerate(IDs):
             tag = "task-" + task_name + "_acq-" + derived_acq_name
             tag_source = "task-" + task_name + "_acq-" + source_acq
 
-            denoised_candidates = glob.glob(os.path.join(denoising_dir.format(ID), tag, config["denoising"]["denoised_dir"],"*"+run_name+"*_nostd.nii.gz"))
+            denoised_candidates = glob.glob(os.path.join(denoising_dir.format(ID), tag, config["denoising"]["denoised_dir"],"*"+run_name+"*_nostd_s.nii.gz"))
             if denoised_candidates:
                 denoised_fmri = denoised_candidates[0]
 
@@ -271,7 +271,7 @@ for ID_nb, ID in enumerate(IDs):
                     thresholded_map.to_filename(fname_thr_img)
 
             for i, contrast_fname in enumerate(stat_maps):
-                preprocess_Sc.apply_warp(
+                norm_stat_maps=preprocess_Sc.apply_warp(
                     i_img=[stat_maps[i]], ID=[ID],
                     o_folder=[os.path.dirname(stat_maps[i])],
                     dest_img=os.path.join(path_code, "template", config["PAM50_t2"]),
