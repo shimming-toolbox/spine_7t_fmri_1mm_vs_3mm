@@ -104,7 +104,7 @@ for ID_nb, ID in enumerate(IDs):
                 else:
                     run_name=""
 
-                denoised_candidates = glob.glob(os.path.join(denoising_dir.format(ID), tag, config["denoising"]["denoised_dir"],"*"+run_name+"*_nostd_s.nii.gz"))
+                denoised_candidates = glob.glob(os.path.join(denoising_dir.format(ID), tag, config["denoising"]["denoised_dir"],"*"+run_name+"*_nostd.nii.gz"))
                 if denoised_candidates:
                     denoised_fmri = denoised_candidates[0]
                 else:
@@ -135,6 +135,7 @@ for ID_nb, ID in enumerate(IDs):
                                                           mask_file=cord_seg_file,
                                                           task_name=tag,
                                                           run_name=run_name,
+                                                          smoothing_fwhm=None,
                                                           redo=redo,
                                                           verbose=verbose)
 
@@ -190,7 +191,7 @@ for ID_nb, ID in enumerate(IDs):
             tag = "task-" + task_name + "_acq-" + derived_acq_name
             tag_source = "task-" + task_name + "_acq-" + source_acq
 
-            denoised_candidates = glob.glob(os.path.join(denoising_dir.format(ID), tag, config["denoising"]["denoised_dir"],"*"+run_name+"*_nostd_s.nii.gz"))
+            denoised_candidates = glob.glob(os.path.join(denoising_dir.format(ID), tag, config["denoising"]["denoised_dir"],"*"+run_name+"*_nostd.nii.gz"))
             if denoised_candidates:
                 denoised_fmri = denoised_candidates[0]
 
@@ -255,7 +256,7 @@ for ID_nb, ID in enumerate(IDs):
 
             stat_maps = glm_ana.run_first_level_glm(
                 ID=ID, i_fname=denoised_fmri, events_file=events_file,
-                mask_file=cord_seg_file, task_name=tag, run_name=run_name,
+                mask_file=cord_seg_file, task_name=tag, run_name=run_name,smoothing_fwhm=None,
                 redo=redo, verbose=verbose, tr=source_tr
             )
 
