@@ -212,12 +212,16 @@ for ID_nb,ID in enumerate(IDs):
                 #------------------------------------------------------------------
                 if acq_name == "shimSlice+1mm+sms2":
                     smooth_imag_files=[Clean_image_file.split(".")[0] + "_s.nii.gz",Clean_image_file_3mmzsmooth.split(".")[0]+ "_s.nii.gz"]
+                    clean_imag_files=[Clean_image_file,Clean_image_file_3mmzsmooth]
                 else:
                     smooth_imag_files=[Clean_image_file.split(".")[0] + "_s.nii.gz"]
+                    clean_imag_files=[Clean_image_file]
 
-                for smooth_imag_file in smooth_imag_files:
+                for i,smooth_imag_file in enumerate(smooth_imag_files):
+                    print(smooth_imag_file)
+                    print(clean_imag_files[i])
                     if not os.path.exists(smooth_imag_file):
-                        smoothed_image=image.smooth_img(Clean_image_file, [1.5,1.5,6])
+                        smoothed_image=image.smooth_img(clean_imag_files[i], [1.5,1.5,2])
                         smoothed_image.to_filename(smooth_imag_file)
                 
                 
