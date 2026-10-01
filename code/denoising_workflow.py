@@ -210,11 +210,15 @@ for ID_nb,ID in enumerate(IDs):
                 #------------------------------------------------------------------
                 #------ Apply smoothing
                 #------------------------------------------------------------------
-                smooth_imag_file=Clean_image_file.split(".")[0] + "_s.nii.gz"
+                if acq_name == "shimSlice+1mm+sms2":
+                    smooth_imag_files=[Clean_image_file.split(".")[0] + "_s.nii.gz",Clean_image_file_3mmzsmooth.split(".")[0]+ "_s.nii.gz"]
+                else:
+                    smooth_imag_files=[Clean_image_file.split(".")[0] + "_s.nii.gz"]
 
-                if not os.path.exists(smooth_imag_file):
-                    smoothed_image=image.smooth_img(Clean_image_file, [1.5,1.5,6])
-                    smoothed_image.to_filename(smooth_imag_file)
+                for smooth_imag_file in smooth_imag_files:
+                    if not os.path.exists(smooth_imag_file):
+                        smoothed_image=image.smooth_img(Clean_image_file, [1.5,1.5,6])
+                        smoothed_image.to_filename(smooth_imag_file)
                 
                 
 
