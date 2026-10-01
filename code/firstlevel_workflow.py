@@ -128,6 +128,7 @@ for ID_nb, ID in enumerate(IDs):
                 events_file=glob.glob(os.path.join(config["raw_dir"], f'sub-{ID}', 'func', f'sub-{ID}_{tag}_*{run_name}*events.tsv'))[0]
 
                 #------ I.2 Run first level GLM
+                print(denoised_fmri)
                 stat_maps=glm_ana.run_first_level_glm(ID=ID,
                                                           i_fname=denoised_fmri,
                                                           events_file=events_file,
@@ -189,15 +190,20 @@ for ID_nb, ID in enumerate(IDs):
             tag = "task-" + task_name + "_acq-" + derived_acq_name
             tag_source = "task-" + task_name + "_acq-" + source_acq
 
-            # Moco file (pick longest run if multiple exist)
-            moco_candidates = sorted(glob.glob(os.path.join(
-                preprocessing_dir.format(ID), 'func', tag,
-                'sct_fmri_moco', f'sub-{ID}_{tag}*_bold_moco.nii.gz'
-            )))
-            if not moco_candidates:
-                print(f"INFO: No moco file for sub-{ID} {tag}, skipping.", flush=True)
-                continue
-            denoised_fmri = max(moco_candidates, key=lambda f: nib.load(f).shape[3])
+            denoised_candidates = glob.glob(os.path.join(denoising_dir.format(ID), tag, config["denoising"]["denoised_dir"],"*"+run_name+"*_nostd_s.nii.gz"))
+            if denoised_candidates:
+                denoised_fmri = denoised_candidates[0]
+
+            else:
+                # Moco file (pick longest run if multiple exist)
+                moco_candidates = sorted(glob.glob(os.path.join(
+                    preprocessing_dir.format(ID), 'func', tag,
+                    'sct_fmri_moco', f'sub-{ID}_{tag}*_bold_moco.nii.gz'
+                )))
+                if not moco_candidates:
+                    print(f"INFO: No moco file for sub-{ID} {tag}, skipping.", flush=True)
+                    continue
+                denoised_fmri = max(moco_candidates, key=lambda f: nib.load(f).shape[3])
 
             match = re.search(r"_?(run-\d+)", denoised_fmri)
             run_name = match.group(1) if match else ""
