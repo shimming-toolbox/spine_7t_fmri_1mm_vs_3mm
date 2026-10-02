@@ -55,8 +55,8 @@ Motion correction uses the new moco-dl model ([ivadomed/moco-dl#25](https://gith
 git clone -b td/25-inference https://github.com/ivadomed/moco-dl.git
 git clone -b 2td/4dimages https://github.com/ivadomed/sc-crop.git
 cd moco-dl
-python3.11 -m venv .venv
-.venv/bin/pip install -r requirement.txt -e ../sc-crop
+conda create -y -p ./.venv python=3.11  # environment inside moco-dl/; do not activate it, the pipeline calls its python directly
+./.venv/bin/pip install -r requirement.txt -e ../sc-crop
 curl -LO https://github.com/ivadomed/moco-dl/releases/download/r20261002/checkpoints.zip && unzip checkpoints.zip
 
 # Before running the pipeline:
