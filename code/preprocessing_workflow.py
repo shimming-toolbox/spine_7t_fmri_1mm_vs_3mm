@@ -94,6 +94,13 @@ ses_name = ""
 preprocessing_dir = os.path.join(config["raw_dir"], config["preprocess_dir"]["main_dir"])
 manual_dir = os.path.join(config["raw_dir"], config["manual_dir"])
 
+# The even/odd slice jitter corrected by destripe_if_sms() is not in the raw data: it was introduced by
+# the previous moco-dl model (`sct_fmri_moco -dl`). Measured as the period-2 AP shift between each slice
+# and its neighbours in the temporal mean, for sub-103 / sub-106 motor 1mm+sms2: raw +0.002 / +0.019 mm,
+# previous model -0.694 / -0.198 mm, new model (code/moco_dl_v2.py) +0.009 / +0.009 mm. With the new
+# model, destriping would only add a resampling, so it is disabled. Set to True if going back to
+# `sct_fmri_moco -dl`.
+DESTRIPE_SMS = False
 
 
 def destripe_if_sms(ID, tag, moco_f, moco_mean_f, redo, verbose):
@@ -113,7 +120,7 @@ def destripe_if_sms(ID, tag, moco_f, moco_mean_f, redo, verbose):
     (see epi_derive_seg_from_rest), so MOTOR must be destriped too, or that
     registration is degraded by residual jitter only present on one side.
     """
-    if "sms" not in tag.lower():
+    if not DESTRIPE_SMS or "sms" not in tag.lower():
         return moco_mean_f
 
     moco_dir = os.path.dirname(moco_f)

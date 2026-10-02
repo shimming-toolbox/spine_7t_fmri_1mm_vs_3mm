@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # General Imports
-import os, glob, shutil, re, json, fnmatch
+import os, glob, shutil, re, json, fnmatch, subprocess
 import pandas as pd
 import numpy as np
 from joblib import Parallel, delayed
@@ -347,7 +347,10 @@ class Preprocess_Sc:
         verbose : bool
             Whether to display information and generate quality control plots (default: True).
         use_dl : bool
-            Whether to use the deep learning model for moco.
+            Whether to use the deep learning model for moco. This runs the new moco-dl model
+            (ivadomed/moco-dl#25) through code/moco_dl_v2.py, in its own Python environment given by
+            the MOCO_DL_PYTHON and MOCO_DL_DIR environment variables (see README). The model locates
+            the cord itself, so `mask_img` is only used for the QC report.
 
         Outputs:
         --------
@@ -399,20 +402,21 @@ class Preprocess_Sc:
         # --- Run motion correction --------------------------------------------------------
         if not os.path.exists(moco_file) or redo:
             print(f">>>>> Running motion correction for sub-{ID}...")
-            # Todo: DL option is worse for 3mm, verify for 1mm/SMS
             if use_dl:
-                os.system("sct_download_data -d moco-dl_models")
-                cmd = f"sct_fmri_moco -i {i_img} -dl -m {mask_img} -ofolder {os.path.join(o_folder, self.structure)} -r 1 -qc {self.qc_dir} -qc-subject sub-{ID} -qc-contrast {task_name or 'anat'} -qc-seg {mask_img} -v 0"
+                # New moco-dl model, run until it is integrated into SCT (ivadomed/moco-dl#25)
+                moco_dl_python = os.environ.get("MOCO_DL_PYTHON")
+                if not moco_dl_python or not os.environ.get("MOCO_DL_DIR"):
+                    raise EnvironmentError("MOCO_DL_PYTHON and MOCO_DL_DIR must be set to run the moco-dl model (see README).")
+                subprocess.run([moco_dl_python, os.path.join(self.code_dir, "code", "moco_dl_v2.py"),
+                                "-i", i_img, "-o", moco_file, "-ofolder", os.path.dirname(moco_file)], check=True)
+                utils.tmean_img(ID=ID, i_img=moco_file, o_img=moco_mean_file, redo=True, verbose=False)
+                # Same QC entry as sct_fmri_moco would generate (moco output first, raw data second)
+                os.system(f"sct_qc -i {moco_file} -d {i_img} -s {mask_img} -p sct_fmri_moco -qc {self.qc_dir} -qc-subject sub-{ID} -qc-contrast {task_name or 'anat'} -v 0")
             else:
                 cmd = f"sct_fmri_moco -i {i_img} -m {mask_img} -param {params} -ofolder {os.path.join(o_folder, self.structure)} -x spline -g 1 -r 1 -qc {self.qc_dir} -qc-subject sub-{ID} -qc-contrast {task_name or 'anat'} -qc-seg {mask_img} -v 0"
-
-            if ref_img is not None:
-                cmd += f" -ref {ref_img}"
-            os.system(cmd)
-
-            if use_dl:
-                os.rename(moco_file.replace("moco.nii.gz", "mocoDL.nii.gz"), moco_file)
-                os.rename(moco_mean_file.replace("moco_mean.nii.gz", "mocoDL_mean.nii.gz"), moco_mean_file)
+                if ref_img is not None:
+                    cmd += f" -ref {ref_img}"
+                os.system(cmd)
 
             # Rename output parameter files for clarity
             for dim in ["x","y"]:

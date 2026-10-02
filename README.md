@@ -47,6 +47,25 @@ conda install -c conda-forge datalad
 pip install -r "${PATH_CODE}/config/requirements.txt"
 ```
 
+#### Setup the moco-dl model (motion correction)
+
+Motion correction uses the new moco-dl model ([ivadomed/moco-dl#25](https://github.com/ivadomed/moco-dl/issues/25)), which is not in SCT yet. It runs through `code/moco_dl_v2.py` in its own Python environment, separate from the conda environment above (it needs other versions of numpy and torch):
+
+```bash
+git clone -b td/25-inference https://github.com/ivadomed/moco-dl.git
+git clone -b 2td/4dimages https://github.com/ivadomed/sc-crop.git
+cd moco-dl
+python3.11 -m venv .venv
+.venv/bin/pip install -r requirement.txt -e ../sc-crop
+curl -LO https://github.com/ivadomed/moco-dl/releases/download/r20261002/checkpoints.zip && unzip checkpoints.zip
+
+# Before running the pipeline:
+export MOCO_DL_DIR="$(pwd)"
+export MOCO_DL_PYTHON="$(pwd)/.venv/bin/python"
+```
+
+Once the model is integrated into SCT, this goes away and moco runs through `sct_fmri_moco` again.
+
 `datalad` (installed above via conda-forge, which also pulls in the `git-annex` binary it needs) is used below to fetch the dataset from OpenNeuro.
 
 ### Download data 📀
@@ -144,7 +163,7 @@ Runs `preprocessing_workflow.py`. For each subject and acquisition:
 
 1. Temporal mean of the functional image
 2. Spinal cord segmentation and centerline detection (with optional manual correction)
-3. Motion correction (`sct_fmri_moco`)
+3. Motion correction (moco-dl model, `code/moco_dl_v2.py`)
 4. Registration of the mean functional image to the PAM50 template
 5. Compute tSNR maps from the motion-corrected **rest** data
 
@@ -159,8 +178,8 @@ Runs `preprocessing_workflow.py`. For each subject and acquisition:
 **Functional — REST acquisitions** (`shimBase+3mm`, `shimSlice+3mm`, `shimBase+1mm+sms2`, `shimSlice+1mm+sms2`)
 1. Compute temporal mean
 2. Detect centerline on mean → build moco mask
-3. Motion-correct time series (`sct_fmri_moco`)
-4. **SMS acquisitions only (`+sms2`)**: correct even/odd slice AP jitter caused by the SMS slice-ordering scheme (`destripe_slices_img`, using `moco_params_y`). The destriped 4D volume is swapped into the canonical `*_moco.nii.gz` path — the original raw `sct_fmri_moco` output is kept alongside as `*_moco_not-destriped.nii.gz` — and the moco mean is recomputed from it. This means every downstream step (segmentation, tSNR, denoising, first-level GLM) sees destriped data automatically, since they all locate the functional time series via the `*_moco.nii.gz` name.
+3. Motion-correct time series (moco-dl model, `code/moco_dl_v2.py`)
+4. ~~SMS acquisitions only (`+sms2`): correct even/odd slice AP jitter (`destripe_slices_img`, using `moco_params_y`).~~ Disabled (`DESTRIPE_SMS = False` in `preprocessing_workflow.py`): that jitter turned out to be introduced by the previous moco-dl model (`sct_fmri_moco -dl`), not present in the raw data, and the new model does not introduce it. When enabled, the destriped 4D volume is swapped into the canonical `*_moco.nii.gz` path and the original moco output is kept as `*_moco_not-destriped.nii.gz`.
 5. Segment cord on moco mean (`sct_deepseg`)
 6. Register PAM50 → REST moco mean (`sct_register_multimodal` via `coreg_img2PAM50`, initwarp = T2w PAM50 warp)
 
@@ -169,8 +188,8 @@ REST is always processed first so MOTOR can borrow from it.
 **Functional — MOTOR acquisitions** (`shimSlice+3mm`, `shimSlice+1mm+sms2`)
 
 These share the same FOV as the matching REST scan, so the REST segmentation is reused:
-1. Moco (temporal mean → centerline → `sct_fmri_moco`)
-2. **SMS acquisitions only (`+sms2`)**: destripe, same as REST above — required since MOTOR is registered to the (destriped) REST moco mean in the next step
+1. Moco (temporal mean → centerline → moco-dl model, `code/moco_dl_v2.py`)
+2. ~~SMS acquisitions only (`+sms2`): destripe, same as REST above~~ Disabled, see REST above
 3. Register REST moco mean → MOTOR moco mean (`sct_register_multimodal`, affine, output saved under `sct_register_rest2motor/`)
 4. Warp REST cord segmentation into MOTOR space via that registration
 5. Map PAM50 into MOTOR space by composing REST's PAM50 warp with the REST→MOTOR warp (`sct_apply_transfo -w PAM50_to_REST -w REST_to_MOTOR`) — no new registration needed
