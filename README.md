@@ -182,18 +182,11 @@ Runs `preprocessing_workflow.py`. For each subject and acquisition:
 4. Segment cord on moco mean (`sct_deepseg`)
 5. Register PAM50 → REST moco mean (`sct_register_multimodal` via `coreg_img2PAM50`, initwarp = T2w PAM50 warp)
 
-REST is always processed first so MOTOR can borrow from it.
-
 **Functional — MOTOR acquisitions** (`shimSlice+3mm`, `shimSlice+1mm+sms2`)
 
-These share the same FOV as the matching REST scan, so the REST segmentation is reused:
-1. Moco (moco-dl model, `code/moco_dl_v2.py`)
-2. ~~SMS acquisitions only (`+sms2`): destripe, same as REST above~~ Disabled, see REST above
-3. Register REST moco mean → MOTOR moco mean (`sct_register_multimodal`, affine, output saved under `sct_register_rest2motor/`)
-4. Warp REST cord segmentation into MOTOR space via that registration
-5. Map PAM50 into MOTOR space by composing REST's PAM50 warp with the REST→MOTOR warp (`sct_apply_transfo -w PAM50_to_REST -w REST_to_MOTOR`) — no new registration needed
+Processed exactly like REST, independently of it: moco, segmentation, and registration to PAM50 driven by the MOTOR scan's own segmentation (#118).
 
-If no matching REST exists for this acquisition, falls back to full independent processing.
+**Which segmentation is used:** for both REST and MOTOR, the manual segmentation in `derivatives/manual/` is used when it exists. As of ds007932 1.3.0 that covers every acquisition except MOTOR `shimSlice+3mm` of sub-101, where the pipeline falls back to `sct_deepseg`.
 
 **Derived — `+avg3mm`** (slice-averaged, REST only)
 
@@ -214,8 +207,7 @@ The 1mm data is z-smoothed with a Gaussian kernel to match the 3mm point spread 
 
 | Acquisition | Segmentation source | PAM50 warp source |
 |---|---|---|
-| REST | `sct_deepseg` on REST moco mean | independent registration |
-| MOTOR | warped from REST via `sct_register_rest2motor` | composed from REST PAM50 warp + REST→MOTOR registration |
+| REST, MOTOR | manual (`derivatives/manual/`), else `sct_deepseg` on the moco mean | independent registration, driven by that segmentation |
 | `+avg3mm` | copied from 1mm source | not needed (native space only) |
 | `+smooth3mm` | copied from 1mm source | copied from 1mm source |
 
@@ -236,9 +228,8 @@ After running preprocessing, open the QC report (`derivatives/processing/qc/inde
 | 2 | Vertebral disc labels (totalspineseg) | search `totalspineseg`, filter function `sct_label_utils` (see [#45](https://github.com/shimming-toolbox/spine_7t_fmri_1mm_vs_3mm/issues/45), [#61](https://github.com/shimming-toolbox/spine_7t_fmri_1mm_vs_3mm/issues/61), [#63](https://github.com/shimming-toolbox/spine_7t_fmri_1mm_vs_3mm/issues/63)) | `sub-<ID>/anat/<filename>_label-discs_dlabel.nii.gz` |
 | 3 | Anat-to-template registration | search `register_to_template`, filter contrast to **Anat** only | re-run with corrected seg/labels from steps 1–2 |
 | 4 | Motion correction | filter function **sct_fmri_moco**, scroll through all entries | report problems on [ivadomed/moco-dl](https://github.com/ivadomed/moco-dl/issues) (no manual input: the model locates the cord itself) |
-| 5 | Functional cord segmentation (**REST only** — MOTOR seg is derived from this; no CSF mask needed) | search `_bold_moco_mean_seg`, filter function `sct_deepseg` | `sub-<ID>/func/<filename>_bold_moco_mean_label-SC_seg.nii.gz` |
-| 6 | Rest-to-motor registration | search `sct_register_rest2motor` | re-run with corrected seg from step 5 |
-| 7 | EPI-to-template registration | search `PAM50_t2_reg` | re-run with corrected seg from step 5 |
+| 5 | Functional cord segmentation (REST and MOTOR; no CSF mask needed) | search `_bold_moco_mean_seg`, filter function `sct_deepseg` | `sub-<ID>/func/<filename>_bold_moco_mean_label-SC_seg.nii.gz` |
+| 6 | EPI-to-template registration | search `PAM50_t2_reg` | re-run with corrected seg from step 5 |
 
 After saving any corrected file, re-run preprocessing with `--redo` so that downstream steps pick up the correction.
 
