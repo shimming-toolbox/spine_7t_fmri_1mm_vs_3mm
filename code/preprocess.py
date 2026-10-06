@@ -404,9 +404,13 @@ class Preprocess_Sc:
             print(f">>>>> Running motion correction for sub-{ID}...")
             if use_dl:
                 # New moco-dl model, run until it is integrated into SCT (ivadomed/moco-dl#25)
-                moco_dl_python = os.environ.get("MOCO_DL_PYTHON")
-                if not moco_dl_python or not os.environ.get("MOCO_DL_DIR"):
-                    raise EnvironmentError("MOCO_DL_PYTHON and MOCO_DL_DIR must be set to run the moco-dl model (see README).")
+                moco_dl_python = os.environ.get("MOCO_DL_PYTHON", "")
+                moco_dl_dir = os.environ.get("MOCO_DL_DIR", "")
+                if not os.path.isfile(moco_dl_python) or not os.path.isfile(os.path.join(moco_dl_dir, "infer.py")):
+                    raise EnvironmentError(
+                        "MOCO_DL_PYTHON must point to the python of the moco-dl environment, and MOCO_DL_DIR to the "
+                        f"moco-dl clone containing infer.py (see README). Got MOCO_DL_PYTHON='{moco_dl_python}', "
+                        f"MOCO_DL_DIR='{moco_dl_dir}'.")
                 subprocess.run([moco_dl_python, os.path.join(self.code_dir, "code", "moco_dl_v2.py"),
                                 "-i", i_img, "-o", moco_file, "-ofolder", os.path.dirname(moco_file)], check=True)
                 utils.tmean_img(ID=ID, i_img=moco_file, o_img=moco_mean_file, redo=True, verbose=False)
