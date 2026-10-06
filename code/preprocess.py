@@ -169,146 +169,10 @@ class Preprocess_Sc:
             self.structure = "" # no structure subfolder if only one structure is specified
 
 
-    def moco_mask(self,ID=None,i_img=None,o_folder=None, mask_size_mm=35,ses_name='',task_name='', tag='',manual=False,redo_ctrl=False,redo_mask=False,verbose=True):
-
-        """
-        This function creates a mask around a spinal cord centerline.
-
-        If a manually drawn centerline exists under `derivatives/manual/` for this image, it takes
-        precedence over the automatically computed one and the mask is rebuilt from it.
-
-        TODO (#73): this whole function is expected to become unnecessary. It exists only because
-        moco-dl needs to be told where the cord is (`sct_fmri_moco -m`). Once #73 lands with a
-        model that localises the cord itself via SCT's automatic `sc-crop` pipeline, the mask —
-        and the centerline, and the manual-correction handling below — can go. Note the mask has
-        three other consumers besides moco (`mask_qc` for the moco QC plot, and `-dseg` for the
-        REST->MOTOR registration in preprocessing_workflow.py), so removal is not a pure deletion;
-        those will need a real cord segmentation instead.
-
-        References:
-        -----------
-        - https://spinalcordtoolbox.com/user_section/command-line.html#sct-get-centerline
-        - https://spinalcordtoolbox.com/user_section/command-line.html#sct-create-mask
-
-        Attributes:
-        -----------
-        ID : str
-            Name of the participant (default: None; an error will be raised if not provided).
-        i_img : str
-            Input filename of the functional image (default: None; an error will be raised if not provided).
-        o_folder : str
-            Output folder name (default: None; if not provided, the input folder will be used).
-        mask_size_mm : int
-            Diameter of the surrounding mask in mm (default: 35).
-        ses_name : str
-            Session name, if applicable (should include the 'ses-' prefix in BIDS format).
-        task_name : str
-            Task name, if applicable (should include the 'task-' prefix in BIDS format).
-        manual : bool
-            Whether to use manual drawing of the centerline (default: False).
-        redo_ctrl : bool
-            Whether to redo the centerline creation (default: False).
-        redo_mask : bool
-            Whether to redo the mask creation (default: False). This step should be repeated if the centerline has been modified.
-        verbose : bool
-            Whether to display information and generate quality control plots (default: True).
-
-        Outputs:
-        --------
-        centerline_f : str
-            Filename of the created centerline.
-        mask_f : str
-            Filename of the created mask.
-        """
-
-
-        # --- Input validation -------------------------------------------------------------
-        if ID is None:
-            raise ValueError("Please provide the participant ID (e.g., _.stc(ID='A001')).")
-        if i_img is None:
-            raise ValueError("Please provide the filename of the input image.")
-
-        # --- Define directories -----------------------------------------------------------
-        preprocess_dir = self.preprocessing_dir.format(ID)
-
-        # --- Define method and output folder ----------------------------------------------
-        if manual:
-            method = "viewer"
-            # NB: ses_name (not the literal string "{ses_name}") — with the literal, manual=True
-            # wrote the centerline to a directory named '{ses_name}', where the manual-centerline
-            # lookup below never looks for it.
-            o_folder = os.path.join(self.manual_dir, f"sub-{ID}", ses_name, "func")
-        else:
-            method = "optic"
-            if o_folder is None : # gave the default folder name if not provided
-                o_folder = os.path.join(preprocess_dir, ses_name, self.config["preprocess_dir"]["func_mask"].format(task_name))
-
-        os.makedirs(os.path.join(o_folder, self.structure), exist_ok=True)
-        centerline_f = os.path.join(o_folder, self.structure, os.path.basename(i_img).split(".")[0] + "_centerline")  # output centerline filename without extension
-
-        # --- Create mask output folder ----------------------------------------------------
-        mask_o_folder = os.path.join(preprocess_dir, ses_name, self.config["preprocess_dir"]["func_mask"].format(task_name))
-        os.makedirs(os.path.join(mask_o_folder, self.structure), exist_ok=True)
-        mask_f = os.path.join(mask_o_folder, self.structure, os.path.basename(i_img).split(".")[0] + "_mask.nii.gz")  # output mask filename
-
-        # --- Resolve which centerline to use ----------------------------------------------
-        # A manually drawn centerline takes precedence over the automatic one. This lookup must
-        # happen *before* sct_create_mask runs, otherwise the mask is built from the automatic
-        # centerline and the manual correction never reaches moco (see issue #113).
-        manual_file = os.path.join(self.manual_dir, f"sub-{ID}", ses_name, "func", os.path.basename(i_img).split(".")[0] + "_centerline.nii.gz")
-        use_manual_centerline = os.path.exists(manual_file)
-
-        # --- Compute centerline -----------------------------------------------------------
-        # Still computed even when a manual centerline exists: it is cheap and its QC report is
-        # what the reviewer compares the manual correction against.
-        if not os.path.exists(centerline_f + ".nii.gz") or redo_ctrl:
-            print(f"Centerline for sub-{ID}")
-            cmd_centerline=f"sct_get_centerline -i {i_img} -o {centerline_f} -c t1 -method {method} -centerline-algo bspline -qc {self.qc_dir} -qc-subject sub-{ID} -qc-contrast {task_name or 'anat'} -v 0"
-            os.system(cmd_centerline)
-
-        if use_manual_centerline:
-            centerline_f = manual_file.split(".nii.gz")[0]
-            print(f"⚠ A manual centerline file exists: {manual_file}")
-            print("The manual centerline is prioritized. Remove it to use the automatic version.")
-            # An existing mask carries no record of which centerline produced it, so it may be a
-            # stale one built from the automatic centerline (mtime is no help: the manual file is
-            # typically older than the mask). sct_create_mask takes ~1 s, so rebuild rather than
-            # risk silently reusing a mask derived from the centerline we just rejected.
-            redo_mask = True
-
-        # --- Create mask around centerline ------------------------------------------------
-        if not os.path.exists(mask_f) or redo_mask:
-            print(f"Create a mask for sub-{ID}")
-            cmd_mask=f"sct_create_mask -i {i_img} -p centerline,{centerline_f}.nii.gz -size {mask_size_mm}mm -o {mask_f} -v 0"
-            os.system(cmd_mask)
-
-        # --- Validate mask and image dimensions ------------------------------------------
-        img_4d = nib.load(i_img) # load the 4D image
-        mask_3d = nib.load(mask_f) # load the 3D mask
-        if img_4d.shape[:3] != mask_3d.shape[:3]:
-            raise ValueError(
-            f"Mask and functional image dimensions do not match.\n"
-            f"Check with: fsleyes {mask_f} {i_img}\n"
-            f"Possible cause: centerline does not start at the first slice."
-            )
-
-        # --- QC handling -----------------------------------------------------------------
-        if use_manual_centerline and manual and redo_ctrl:
-            print("Running QC for manual centerline...")
-            cmd_qc = f"sct_qc -i {i_img} -s {centerline_f}.nii.gz -p sct_get_centerline -qc {self.qc_dir } -qc-subject sub-{ID} -qc-contrast {task_name or 'anat'} -v 0"
-            os.system(cmd_qc)
-
-        # --- Generate QC plot -------------------------------------------------------------
-        if verbose:
-            qc_indiv_path = os.path.join(self.qc_dir, f"sub-{ID}", "func", ses_name, task_name, "sct_get_centerline")
-            self._plot_qc(ID=ID, ses_name=ses_name, task_name=task_name, tag="centerline", qc_indiv_path=qc_indiv_path, fig_size=(15,15),alpha=0.8)
-
-            if not use_manual_centerline:
-                print("If manual corrections are needed, set:")
-                print("manual=True, redo_ctrl=True, redo_mask=True")
-                print("⚠ Ensure the centerline starts at the first slice.")
-
-        return centerline_f +'.nii.gz', mask_f
+    @staticmethod
+    def cropbox_file(moco_file):
+        """Box around the cord found by the moco-dl model (sc_crop), saved next to the moco output."""
+        return moco_file.replace("_moco.nii.gz", "_cropbox.nii.gz")
 
     def moco(self,ID=None,i_img=None,mask_img=None,ref_img=None,o_folder=None,params=None,ses_name='',task_name='',run_name="",redo=False,verbose=True,use_dl=False):
 
@@ -327,7 +191,8 @@ class Preprocess_Sc:
         i_img : str
             Input filename of the 4D functional images (default: None; an error will be raised if not provided).
         mask_img : str
-            Filename of the binary mask used to restrict voxels considered by the registration metric (default: None; an error will be raised if not provided).
+            Filename of the binary mask used to restrict voxels considered by the registration metric. Required
+            with use_dl=False (sct_fmri_moco); not used with use_dl=True, where the model locates the cord itself.
         ref_img : str
             Reference image for motion correction (default: None; if not provided, the first volume of the input image is used).
         o_folder : str
@@ -350,7 +215,8 @@ class Preprocess_Sc:
             Whether to use the deep learning model for moco. This runs the new moco-dl model
             (ivadomed/moco-dl#25) through code/moco_dl_v2.py, in its own Python environment given by
             the MOCO_DL_PYTHON and MOCO_DL_DIR environment variables (see README). The model locates
-            the cord itself, so `mask_img` is only used for the QC report.
+            the cord itself (sc_crop): its box around the cord is saved as `*_cropbox.nii.gz` next to the
+            moco output (see `cropbox_file()`), and is used to crop the QC reports.
 
         Outputs:
         --------
@@ -375,7 +241,7 @@ class Preprocess_Sc:
             raise ValueError("Please provide a participant ID (e.g., _.stc(ID='A001')).")
         if i_img is None:
             raise ValueError("Please provide the input image filename.")
-        if mask_img is None:
+        if mask_img is None and not use_dl:
             raise ValueError("Please provide the mask image filename.")
 
         print_step_header("motion correction", ID, ses_name, task_name, run_name)
@@ -411,11 +277,13 @@ class Preprocess_Sc:
                         "MOCO_DL_PYTHON must point to the python of the moco-dl environment, and MOCO_DL_DIR to the "
                         f"moco-dl clone containing infer.py (see README). Got MOCO_DL_PYTHON='{moco_dl_python}', "
                         f"MOCO_DL_DIR='{moco_dl_dir}'.")
+                cropbox = self.cropbox_file(moco_file)
                 subprocess.run([moco_dl_python, os.path.join(self.code_dir, "code", "moco_dl_v2.py"),
-                                "-i", i_img, "-o", moco_file, "-ofolder", os.path.dirname(moco_file)], check=True)
+                                "-i", i_img, "-o", moco_file, "-ofolder", os.path.dirname(moco_file),
+                                "-ocropbox", cropbox], check=True)
                 utils.tmean_img(ID=ID, i_img=moco_file, o_img=moco_mean_file, redo=True, verbose=False)
                 # Same QC entry as sct_fmri_moco would generate (moco output first, raw data second)
-                os.system(f"sct_qc -i {moco_file} -d {i_img} -s {mask_img} -p sct_fmri_moco -qc {self.qc_dir} -qc-subject sub-{ID} -qc-contrast {task_name or 'anat'} -v 0")
+                os.system(f"sct_qc -i {moco_file} -d {i_img} -s {cropbox} -p sct_fmri_moco -qc {self.qc_dir} -qc-subject sub-{ID} -qc-contrast {task_name or 'anat'} -v 0")
             else:
                 cmd = f"sct_fmri_moco -i {i_img} -m {mask_img} -param {params} -ofolder {os.path.join(o_folder, self.structure)} -x spline -g 1 -r 1 -qc {self.qc_dir} -qc-subject sub-{ID} -qc-contrast {task_name or 'anat'} -qc-seg {mask_img} -v 0"
                 if ref_img is not None:

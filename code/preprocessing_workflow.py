@@ -43,7 +43,6 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--ids", nargs='+', default=[""])
 parser.add_argument("--tasks", nargs='+', default=[""])
 parser.add_argument("--verbose", default="False")
-parser.add_argument("--manual_centerline", default="False")
 parser.add_argument("--auto_vert_labels", default="True")
 parser.add_argument("--redo", default="True")
 parser.add_argument("--path-data", required=True)
@@ -52,7 +51,6 @@ args = parser.parse_args()
 IDs = args.ids
 tasks = args.tasks
 verbose = args.verbose.lower() == "true"
-manual_centerline = args.manual_centerline.lower() == "true"
 auto_vert_labels = args.auto_vert_labels.lower() == "true"
 redo = args.redo.lower() == "true"
 path_data = os.path.abspath(args.path_data)
@@ -65,7 +63,6 @@ print("=== Preprocessing parameters ===", flush=True)
 print("Participant IDs: ", IDs, flush=True)
 print("Tasks to process: ", tasks, flush=True)
 print("Verbose: ", verbose, flush=True)
-print("Manual centerline: ", manual_centerline, flush=True)
 print("Auto vertebral labels: ", auto_vert_labels, flush=True)
 print("Redo steps: ", redo, flush=True)
 print("================================", flush=True)
@@ -144,30 +141,17 @@ def destripe_if_sms(ID, tag, moco_f, moco_mean_f, redo, verbose):
     return moco_mean_f
 
 
-def epi_full_processing(ID, func_file, tag, manual_centerline, warpT2w_PAM50_files, params_moco, o_dir, redo, verbose):
-    # ------------------------------------------------------------------
-    # ------ Create mask around the cord for moco
-    # ------------------------------------------------------------------
+def epi_full_processing(ID, func_file, tag, warpT2w_PAM50_files, params_moco, o_dir, redo, verbose):
+    # Temporal mean of the raw data: reference for the moco of additional runs of this acquisition
     o_img = os.path.join(o_dir, os.path.basename(func_file).split(".")[0] + "_tmean.nii.gz")
-    mean_func_f = utils.tmean_img(ID=ID, i_img=func_file, o_img=o_img, verbose=False)
-    ctrl_sc_file, mask_sc_file = preprocess_Sc.moco_mask(ID=ID,
-                                                         i_img=mean_func_f,
-                                                         mask_size_mm=35,
-                                                         task_name=tag,
-                                                         manual=manual_centerline,
-                                                         redo_ctrl=redo,
-                                                         redo_mask=redo,
-                                                         verbose=verbose)
-
-    print(mask_sc_file)
-    print(f'=== Moco masks : Done  {ID} {tag} {run_name} ===', flush=True)
+    utils.tmean_img(ID=ID, i_img=func_file, o_img=o_img, verbose=False)
 
     # ------------------------------------------------------------------
     # ------ Run moco
     # ------------------------------------------------------------------
+    # The moco-dl model locates the cord itself (sc_crop); its box around the cord crops the QC reports.
     moco_f, moco_mean_f, qc_dir = preprocess_Sc.moco(ID=ID,
                                                      i_img=func_file,
-                                                     mask_img=mask_sc_file,
                                                      task_name=tag,
                                                      run_name=run_name,
                                                      params=params_moco,
@@ -189,7 +173,7 @@ def epi_full_processing(ID, func_file, tag, manual_centerline, warpT2w_PAM50_fil
                                                   i_img=moco_mean_f,
                                                   task_name=tag,
                                                   img_type="func",
-                                                  mask_qc=mask_sc_file,
+                                                  mask_qc=preprocess_Sc.cropbox_file(moco_f),
                                                   redo=redo,
                                                   redo_qc=redo,  # should be true if you have done manual correction
                                                   verbose=verbose)
@@ -220,18 +204,9 @@ def epi_derive_seg_from_rest(ID, rest_tag, func_file, tag, params_moco, o_dir, r
     """Moco MOTOR, register REST mean-moco -> MOTOR mean-moco, warp REST seg to MOTOR space."""
     # Moco for MOTOR using its own mean as reference
     o_img = os.path.join(o_dir, os.path.basename(func_file).split(".")[0] + "_tmean.nii.gz")
-    mean_func_f = utils.tmean_img(ID=ID, i_img=func_file, o_img=o_img, verbose=False)
-    ctrl_sc_file, mask_sc_file = preprocess_Sc.moco_mask(ID=ID,
-                                                         i_img=mean_func_f,
-                                                         mask_size_mm=35,
-                                                         task_name=tag,
-                                                         manual=manual_centerline,
-                                                         redo_ctrl=redo,
-                                                         redo_mask=redo,
-                                                         verbose=verbose)
+    utils.tmean_img(ID=ID, i_img=func_file, o_img=o_img, verbose=False)
     moco_f, moco_mean_f, qc_dir = preprocess_Sc.moco(ID=ID,
                                                       i_img=func_file,
-                                                      mask_img=mask_sc_file,
                                                       task_name=tag,
                                                       run_name=run_name,
                                                       params=params_moco,
@@ -262,7 +237,7 @@ def epi_derive_seg_from_rest(ID, rest_tag, func_file, tag, params_moco, o_dir, r
     warp_motor2rest  = os.path.join(reg_dir, f"sub-{ID}_{tag}_from-motor_to-rest_xfm.nii.gz")
     if not os.path.exists(warp_rest2motor) or not os.path.exists(warp_motor2rest) or redo:
         cmd_reg = (f"sct_register_multimodal -i {rest_moco_mean} -d {moco_mean_f}"
-                   f" -dseg {mask_sc_file}"
+                   f" -dseg {preprocess_Sc.cropbox_file(moco_f)}"
                    f" -param step=1,type=im,algo=affine,metric=CC -ofolder {reg_dir}"
                    f" -qc {preprocess_Sc.qc_dir} -qc-subject sub-{ID} -qc-contrast {tag} -v 0")
         os.system(cmd_reg)
@@ -583,7 +558,7 @@ for ID_nb, ID in enumerate(IDs):
                     # REST: full processing (moco + sct_deepseg + PAM50 registration).
                     # REST mean-moco is cleaner (no task confounds), making it the better
                     # substrate for segmentation. MOTOR will derive its seg from this.
-                    epi_full_processing(ID, func_file, tag, manual_centerline, warpT2w_PAM50_files, params_moco, o_dir, redo, verbose)
+                    epi_full_processing(ID, func_file, tag, warpT2w_PAM50_files, params_moco, o_dir, redo, verbose)
 
                 elif task_name == 'motor' and i_func == 0:
                     # MOTOR: moco using own mean, then register REST mean-moco -> MOTOR mean-moco
@@ -597,7 +572,7 @@ for ID_nb, ID in enumerate(IDs):
                     else:
                         # REST not available for this acq (e.g. sub-099 1mm) — fall back to full processing.
                         print(f'No REST moco mean found for {rest_tag}; running full processing for MOTOR.', flush=True)
-                        epi_full_processing(ID, func_file, tag, manual_centerline, warpT2w_PAM50_files, params_moco, o_dir, redo, verbose)
+                        epi_full_processing(ID, func_file, tag, warpT2w_PAM50_files, params_moco, o_dir, redo, verbose)
 
                 else:
                     # Additional runs (i_func > 0): run moco referencing own task's first run,
@@ -608,18 +583,10 @@ for ID_nb, ID in enumerate(IDs):
                         print(f'=== Using {ref_func_file} as reference for moco ===', flush=True)
                     except IndexError as e:
                         print(f'No reference file found for {ref_tag} in raw data.', flush=True)
-                        epi_full_processing(ID, func_file, tag, manual_centerline, warpT2w_PAM50_files, params_moco, o_dir, redo, verbose)
+                        epi_full_processing(ID, func_file, tag, warpT2w_PAM50_files, params_moco, o_dir, redo, verbose)
                         continue
-                    try:
-                        ref_mask_file = glob.glob(os.path.join(preprocessing_dir.format(ID), "func", ref_tag, "sct_get_centerline", f"sub-{ID}_{ref_tag}_*tmean_mask.nii.gz"))[0]
-                        print(f'=== Using {ref_mask_file} as reference mask for moco ===', flush=True)
-                    except IndexError as e:
-                        print(f'No reference mask file found for {ref_tag} in raw data.', flush=True)
-                        raise e
-
                     moco_f, moco_mean_f, qc_dir = preprocess_Sc.moco(ID=ID,
                                                                 i_img=func_file,
-                                                                mask_img=ref_mask_file,
                                                                 ref_img=ref_func_file,
                                                                 task_name=tag,
                                                                 run_name=run_name,

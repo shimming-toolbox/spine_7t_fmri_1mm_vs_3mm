@@ -88,6 +88,7 @@ def main():
     parser.add_argument("-i", required=True, help="Raw 4D fMRI image")
     parser.add_argument("-o", required=True, help="Motion-corrected 4D output")
     parser.add_argument("-ofolder", required=True, help="Folder for moco_params_x/y.nii.gz")
+    parser.add_argument("-ocropbox", help="Optional: save sc_crop's box around the cord (found on the raw image) here")
     args = parser.parse_args()
 
     checkpoints = os.path.join(MOCO_DL_DIR, "checkpoints")
@@ -101,6 +102,8 @@ def main():
                                   os.path.join(tmp, "crop1.nii.gz"), "nearest")
         A2, b2, _ = run_pass(pass1, os.path.join(checkpoints, "second_model.pt"), args.o,
                              os.path.join(tmp, "crop2.nii.gz"), "bilinear")
+        if args.ocropbox:
+            shutil.copy(os.path.join(tmp, "raw_cropbox.nii.gz"), args.ocropbox)
 
     # Compose both passes: out(p) = pass1(A2 p + b2) = raw(A1 (A2 p + b2) + b1).
     # Motion parameter = displacement of the cord (crop centre) between output and raw, i.e. where
