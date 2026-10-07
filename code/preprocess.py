@@ -270,8 +270,8 @@ class Preprocess_Sc:
             print(f">>>>> Running motion correction for sub-{ID}...")
             if use_dl:
                 # New moco-dl model, run until it is integrated into SCT (ivadomed/moco-dl#25)
-                moco_dl_python = os.environ.get("MOCO_DL_PYTHON", "")
-                moco_dl_dir = os.environ.get("MOCO_DL_DIR", "")
+                moco_dl_python = os.path.expandvars(os.environ.get("MOCO_DL_PYTHON", ""))
+                moco_dl_dir = os.path.expandvars(os.environ.get("MOCO_DL_DIR", ""))
                 if not os.path.isfile(moco_dl_python) or not os.path.isfile(os.path.join(moco_dl_dir, "infer.py")):
                     raise EnvironmentError(
                         "MOCO_DL_PYTHON must point to the python of the moco-dl environment, and MOCO_DL_DIR to the "
