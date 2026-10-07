@@ -21,7 +21,7 @@ import nibabel as nib
 import numpy as np
 import torch
 
-MOCO_DL_DIR = os.environ.get("MOCO_DL_DIR")
+MOCO_DL_DIR = os.path.expandvars(os.environ.get("MOCO_DL_DIR"))
 if not MOCO_DL_DIR or not os.path.exists(os.path.join(MOCO_DL_DIR, "infer.py")):
     sys.exit("MOCO_DL_DIR must point to a clone of ivadomed/moco-dl (td/25-inference) containing infer.py")
 sys.path.insert(0, MOCO_DL_DIR)
