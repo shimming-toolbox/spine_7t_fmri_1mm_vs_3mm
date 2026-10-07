@@ -282,8 +282,16 @@ class Preprocess_Sc:
                                 "-i", i_img, "-o", moco_file, "-ofolder", os.path.dirname(moco_file),
                                 "-ocropbox", cropbox], check=True)
                 utils.tmean_img(ID=ID, i_img=moco_file, o_img=moco_mean_file, redo=True, verbose=False)
-                # Same QC entry as sct_fmri_moco would generate (moco output first, raw data second)
-                os.system(f"sct_qc -i {moco_file} -d {i_img} -s {cropbox} -p sct_fmri_moco -qc {self.qc_dir} -qc-subject sub-{ID} -qc-contrast {task_name or 'anat'} -v 0")
+                # Same QC entry as sct_fmri_moco would generate (moco output first, raw data second).
+                # The QC is centred on the cord using the manual segmentation of this image (in
+                # derivatives/manual for almost every acquisition). The sc_crop box is only a fallback:
+                # the QC would then be centred on the box rather than on the cord.
+                qc_seg = os.path.join(self.manual_dir, f"sub-{ID}", ses_name, "func",
+                                      os.path.basename(i_img).split(".")[0] + "_moco_mean_label-SC_seg.nii.gz")
+                if not os.path.exists(qc_seg):
+                    print(f"No manual segmentation {qc_seg}: moco QC cropped around the sc_crop box instead.")
+                    qc_seg = cropbox
+                os.system(f"sct_qc -i {moco_file} -d {i_img} -s {qc_seg} -p sct_fmri_moco -qc {self.qc_dir} -qc-subject sub-{ID} -qc-contrast {task_name or 'anat'} -v 0")
             else:
                 cmd = f"sct_fmri_moco -i {i_img} -m {mask_img} -param {params} -ofolder {os.path.join(o_folder, self.structure)} -x spline -g 1 -r 1 -qc {self.qc_dir} -qc-subject sub-{ID} -qc-contrast {task_name or 'anat'} -qc-seg {mask_img} -v 0"
                 if ref_img is not None:
