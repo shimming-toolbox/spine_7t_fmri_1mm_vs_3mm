@@ -72,13 +72,17 @@ fi
 # --------------------------
 # Prepare log folder
 # --------------------------
-cd "${PATH_CODE}" || { echo "ERROR: could not cd to PATH_CODE='${PATH_CODE}'. Pass --path-code /path/to/repo"; exit 1; }
-mkdir -p log
-cd log || { echo "ERROR: could not cd into log/"; exit 1; }
+# Logs go with the processing outputs (derivatives/processing/log), so they stay with them when the
+# processing folder is renamed or copied. Paths are made absolute since we cd into the log folder.
+PATH_CODE=$(cd "${PATH_CODE}" 2>/dev/null && pwd) || { echo "ERROR: could not cd to PATH_CODE. Pass --path-code /path/to/repo"; exit 1; }
+PATH_DATA=$(cd "${PATH_DATA}" 2>/dev/null && pwd) || { echo "ERROR: could not cd to PATH_DATA. Pass --path-data /path/to/dataset"; exit 1; }
+LOG_DIR="${PATH_DATA}/derivatives/processing/log"
+mkdir -p "${LOG_DIR}"
+cd "${LOG_DIR}" || { echo "ERROR: could not cd into ${LOG_DIR}"; exit 1; }
 
 timestamp=$(date +"%Y%m%d_%H%M%S")
 
-# Save the full invocation so it can be recovered after a crash (cat log/last_run.sh)
+# Save the full invocation so it can be recovered after a crash (cat derivatives/processing/log/last_run.sh)
 echo "bash $(realpath "$0") ${INVOCATION_ARGS}" > last_run.sh
 echo "# Run on: $(date)" >> last_run.sh
 
@@ -89,7 +93,7 @@ echo "# Run on: $(date)" >> last_run.sh
 run_step() {
     local label="$1"; local logfile="$2"; shift 2
     echo ""
-    echo "=== Starting ${label} === (log: log/${logfile})"
+    echo "=== Starting ${label} === (log: ${LOG_DIR}/${logfile})"
     local t_start=$SECONDS
     # Run directly (no nohup/&): screen handles disconnection.
     # tee shows output live in screen AND saves to the log file.
@@ -107,7 +111,7 @@ run_step() {
 
 if [ "${RUN_PREPROSS}" = true ]; then
     run_step "Preprocessing" "preprocessing_${timestamp}.txt" \
-        ${PYTHON} -u ../code/preprocessing_workflow.py --path-data "${PATH_DATA}" --ids "${IDs[@]}" "${TASKS_ARG[@]}" --redo "${REDO}"
+        ${PYTHON} -u "${PATH_CODE}"/code/preprocessing_workflow.py --path-data "${PATH_DATA}" --ids "${IDs[@]}" "${TASKS_ARG[@]}" --redo "${REDO}"
 fi
 
 # --------------------------
@@ -116,7 +120,7 @@ fi
 
 if [ "${RUN_DENOISING}" = true ]; then
     run_step "Denoising" "denoising_${timestamp}.txt" \
-        ${PYTHON} -u ../code/denoising_workflow.py --path-data "${PATH_DATA}" --ids "${IDs[@]}" "${TASKS_ARG[@]}" --redo "${REDO}"
+        ${PYTHON} -u "${PATH_CODE}"/code/denoising_workflow.py --path-data "${PATH_DATA}" --ids "${IDs[@]}" "${TASKS_ARG[@]}" --redo "${REDO}"
 fi
 
 # --------------------------
@@ -125,7 +129,7 @@ fi
 
 if [ "${RUN_FIRSTLEVEL}" = true ]; then
     run_step "First level analysis" "firstlevel_${timestamp}.txt" \
-        ${PYTHON} -u ../code/firstlevel_workflow.py --path-data "${PATH_DATA}" --ids "${IDs[@]}" "${TASKS_ARG[@]}" --redo "${REDO}"
+        ${PYTHON} -u "${PATH_CODE}"/code/firstlevel_workflow.py --path-data "${PATH_DATA}" --ids "${IDs[@]}" "${TASKS_ARG[@]}" --redo "${REDO}"
 fi
 
 # --------------------------
@@ -133,7 +137,7 @@ fi
 # --------------------------
 if [ "${RUN_SECONDLEVEL}" = true ]; then
     run_step "Second level analysis" "secondlevel_${timestamp}.txt" \
-        ${PYTHON} -u ../code/secondlevel_workflow.py --path-data "${PATH_DATA}" --ids "${IDs[@]}" "${TASKS_ARG[@]}" --redo "${REDO}" --n-perm "${N_PERM}" --n-jobs "${N_JOBS}"
+        ${PYTHON} -u "${PATH_CODE}"/code/secondlevel_workflow.py --path-data "${PATH_DATA}" --ids "${IDs[@]}" "${TASKS_ARG[@]}" --redo "${REDO}" --n-perm "${N_PERM}" --n-jobs "${N_JOBS}"
 fi
 
 # --------------------------
@@ -141,5 +145,5 @@ fi
 # --------------------------
 if [ "${RUN_FIGURES}" = true ]; then
     run_step "Figures" "figures_${timestamp}.txt" \
-        ${PYTHON} -u ../code/figures_workflow.py --path-data "${PATH_DATA}" --ids "${IDs[@]}" --redo "${REDO}"
+        ${PYTHON} -u "${PATH_CODE}"/code/figures_workflow.py --path-data "${PATH_DATA}" --ids "${IDs[@]}" --redo "${REDO}"
 fi
