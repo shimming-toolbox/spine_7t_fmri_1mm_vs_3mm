@@ -19,7 +19,6 @@
 
 "preprocess_dir":{"main_dir":"derivatives/processing/preprocessing/sub-{}/",
                   "QC_dir":"derivatives/processing/preprocessing/QC/",
-                  "func_mask":"func/{}/sct_get_centerline/",
                   "func_moco":"func/{}/sct_fmri_moco/",
                   "func_seg":"func/{}/sct_deepseg/",
                   "func_csf_seg":"func/{}/sct_propseg/",
@@ -29,7 +28,6 @@
                   },
 
 "preprocess_f":{"anat_raw":"sub-{}_{}T2star.nii.gz",
-                  "func_mask":"",
                   "func_moco":"sub-{}*{}*{}*moco.nii.gz",
                   "moco_params":"moco_params*{}*{}.nii.gz",
                   "func_seg":"sub-{}*{}*{}*mean_seg.nii.gz",

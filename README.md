@@ -10,15 +10,76 @@ Processing of spinal cord functional data acquired at 7T, comparing 1mm vs 3mm i
 
 ### Set up your project paths
 
-Create a folder that will contain the code and data, then define the variable in your shell:
+Create a folder that will contain the code and data, then define the variables in your shell:
 
 ```bash
 export PATH_PROJECT=<PATH_TO_PROJECT>
+export PATH_DATA="${PATH_PROJECT}/ds007932"
+export PATH_CODE="${PATH_PROJECT}/spine_7t_fmri_1mm_vs_3mm"
 ```
+
+### Clone repository
+
+```bash
+git clone https://github.com/shimming-toolbox/spine_7t_fmri_1mm_vs_3mm.git "${PATH_CODE}"
+```
+
+### Dependencies 🔗
+
+#### External dependencies
+
+- **Spinal Cord Toolbox** — this pipeline relies on the `-qc-contrast` option added by [spinalcordtoolbox/spinalcordtoolbox#5244](https://github.com/spinalcordtoolbox/spinalcordtoolbox/pull/5244). That PR merged into `master` on 2026-09-29, but hasn't shipped in a release yet — the latest is [v7.3](https://github.com/spinalcordtoolbox/spinalcordtoolbox/releases/tag/7.3) (published 2026-05-09, before the merge). Until the next release, install SCT from source on `master` instead of following the standard [installation guide](https://spinalcordtoolbox.com/en/latest/user_section/installation.html):
+  ```bash
+  git clone https://github.com/spinalcordtoolbox/spinalcordtoolbox.git
+  cd spinalcordtoolbox
+  ./install_sct
+  ```
+  (tracked in [#104](https://github.com/shimming-toolbox/spine_7t_fmri_1mm_vs_3mm/issues/104) — once a release includes this fix, this note goes away and a released SCT version is enough)
+- [FSL](https://fsl.fmrib.ox.ac.uk/fsl/fslwiki/FslInstallation)
+- [Conda](https://docs.conda.io/projects/conda/en/latest/user-guide/install/index.html)
+
+#### Setup the conda environment
+
+```bash
+conda create --name spine_7T_env_py10 python=3.10
+conda activate spine_7T_env_py10
+conda install -c conda-forge datalad
+pip install -r "${PATH_CODE}/config/requirements.txt"
+```
+
+#### Setup the moco-dl model (motion correction)
+
+Motion correction uses the new moco-dl model ([ivadomed/moco-dl#25](https://github.com/ivadomed/moco-dl/issues/25)), which is not in SCT yet. It runs through `code/moco_dl_v2.py` in its own Python environment, separate from the conda environment above (it needs other versions of numpy and torch):
+
+```bash
+git clone -b td/25-inference https://github.com/ivadomed/moco-dl.git
+git clone -b 2td/4dimages https://github.com/ivadomed/sc-crop.git
+cd moco-dl
+conda create -y -p ./.venv python=3.11  # environment inside moco-dl/; do not activate it, the pipeline calls its python directly
+./.venv/bin/pip install -r requirement.txt -e ../sc-crop
+curl -LO https://github.com/ivadomed/moco-dl/releases/download/r20261002/checkpoints.zip && unzip checkpoints.zip
+
+# Before running the pipeline:
+export MOCO_DL_DIR="$(pwd)"
+export MOCO_DL_PYTHON="$(pwd)/.venv/bin/python"
+```
+
+Once the model is integrated into SCT, this goes away and moco runs through `sct_fmri_moco` again.
+
+`datalad` (installed above via conda-forge, which also pulls in the `git-annex` binary it needs) is used below to fetch the dataset from OpenNeuro.
 
 ### Download data 📀
 
-See: https://openneuro.org/datasets/ds007932/download
+With the conda environment above active:
+```bash
+datalad clone https://github.com/OpenNeuroDatasets/ds007932.git "${PATH_DATA}"
+cd "${PATH_DATA}" && datalad get . && cd -
+```
+
+> [!NOTE]
+> `datalad clone` sets up the dataset layout with lightweight placeholder files; `datalad get .` then downloads the actual file content (raw data + derivatives — several GB, so this can take a while). Re-running `datalad get .` later is safe and only fetches what's missing.
+
+Prefer to browse the dataset first, or download it without DataLad? See https://openneuro.org/datasets/ds007932/download.
 
 <details>
 <summary>Files are organized according to the BIDS standard.</summary>
@@ -55,32 +116,16 @@ See: https://openneuro.org/datasets/ds007932/download
 
 </details>
 
-Define variables:
-```bash
-export PATH_DATA="${PATH_PROJECT}/ds007932"
-export PATH_CODE="${PATH_PROJECT}/spine_7t_fmri_1mm_vs_3mm"
-```
+---
 
-### Clone repository
+## Tests 🧪
 
-```bash
-git clone https://github.com/shimming-toolbox/spine_7t_fmri_1mm_vs_3mm.git "${PATH_CODE}"
-```
-
-### Dependencies 🔗
-
-#### External dependencies
-
-- [Spinal Cord Toolbox v7.2](https://spinalcordtoolbox.com/en/latest/user_section/installation.html)
-- [FSL](https://fsl.fmrib.ox.ac.uk/fsl/fslwiki/FslInstallation)
-- [Conda](https://docs.conda.io/projects/conda/en/latest/user-guide/install/index.html)
-
-#### Setup the conda environment
+A small unit-test suite covers pipeline logic that can be checked without data or SCT
+binaries (SCT calls are stubbed out). Run it with the same Python the pipeline uses, since
+the modules under test import `nibabel`, `pandas` and `matplotlib`:
 
 ```bash
-conda create --name spine_7T_env_py10 python=3.10
-conda activate spine_7T_env_py10
-pip install -r "${PATH_CODE}/config/requirements.txt"
+$SCT_DIR/python/envs/venv_sct/bin/python3 -m pytest tests/ -v
 ```
 
 ---
@@ -89,29 +134,20 @@ pip install -r "${PATH_CODE}/config/requirements.txt"
 
 The pipeline consists of four sequential steps run via a single shell script:
 
-```
-preprocess  →  firstlevel  →  secondlevel  →  figures
+```mermaid
+flowchart LR
+    A["<b>1. Preprocessing</b><br/><code>--preprocess</code>"] --> B["<b>2. First-level</b><br/><code>--firstlevel</code>"] --> C["<b>3. Second-level</b><br/><code>--secondlevel</code>"] --> D["<b>4. Figures</b><br/><code>--figures</code>"]
 ```
 
 ### Run the full pipeline
 
 ```bash
-bash "${PATH_CODE}/code/run_all_processing.sh" \
-  --path-data "${PATH_DATA}" \
-  --path-code "${PATH_CODE}" \
-  --preprocess --firstlevel --secondlevel --figures
+bash "${PATH_CODE}/code/run_all_processing.sh" --path-data "${PATH_DATA}" --path-code "${PATH_CODE}" --preprocess --firstlevel --secondlevel --figures
 ```
 
-> [!NOTE]
-> Do not restrict to `--tasks motor` here. Some acquisitions (shimBase+3mm, shimBase+1mm+sms2) were collected during the **rest** task and are needed for tSNR comparisons.
-
-To process a subset of subjects, add `--ids`:
+To process a subset of subjects, add `--ids` (valid IDs are those listed in `config/participants.tsv`; sub-099 is excluded from the analysis — see [#95](https://github.com/shimming-toolbox/spine_7t_fmri_1mm_vs_3mm/issues/95) — and passing it will error out):
 ```bash
-bash "${PATH_CODE}/code/run_all_processing.sh" \
-  --path-data "${PATH_DATA}" \
-  --path-code "${PATH_CODE}" \
-  --ids 099 100 101 \
-  --preprocess --firstlevel --secondlevel --figures
+bash "${PATH_CODE}/code/run_all_processing.sh" --path-data "${PATH_DATA}" --path-code "${PATH_CODE}" --ids 100 101 102 --preprocess --firstlevel --secondlevel --figures
 ```
 
 Use `--redo` to force rerunning all steps even if outputs already exist. By default, existing outputs are reused.
@@ -126,8 +162,8 @@ Use `--redo` to force rerunning all steps even if outputs already exist. By defa
 Runs `preprocessing_workflow.py`. For each subject and acquisition:
 
 1. Temporal mean of the functional image
-2. Spinal cord segmentation and centerline detection (with optional manual correction)
-3. Motion correction (`sct_fmri_moco`)
+2. Motion correction (moco-dl model, `code/moco_dl_v2.py`, which locates the cord itself)
+3. Spinal cord segmentation (with optional manual correction)
 4. Registration of the mean functional image to the PAM50 template
 5. Compute tSNR maps from the motion-corrected **rest** data
 
@@ -140,25 +176,17 @@ Runs `preprocessing_workflow.py`. For each subject and acquisition:
 3. Register T2\* to PAM50 template (`sct_register_to_template`) → produces the **T2w PAM50 warp**, reused as initwarp for all EPI registrations below
 
 **Functional — REST acquisitions** (`shimBase+3mm`, `shimSlice+3mm`, `shimBase+1mm+sms2`, `shimSlice+1mm+sms2`)
-1. Compute temporal mean
-2. Detect centerline on mean → build moco mask
-3. Motion-correct time series (`sct_fmri_moco`)
-4. **SMS acquisitions only (`+sms2`)**: correct even/odd slice AP jitter caused by the SMS slice-ordering scheme (`destripe_slices_img`, using `moco_params_y`). The destriped 4D volume is swapped into the canonical `*_moco.nii.gz` path — the original raw `sct_fmri_moco` output is kept alongside as `*_moco_not-destriped.nii.gz` — and the moco mean is recomputed from it. This means every downstream step (segmentation, tSNR, denoising, first-level GLM) sees destriped data automatically, since they all locate the functional time series via the `*_moco.nii.gz` name.
-5. Segment cord on moco mean (`sct_deepseg`)
-6. Register PAM50 → REST moco mean (`sct_register_multimodal` via `coreg_img2PAM50`, initwarp = T2w PAM50 warp)
-
-REST is always processed first so MOTOR can borrow from it.
+1. Compute temporal mean (reference for additional runs)
+2. Motion-correct time series (moco-dl model, `code/moco_dl_v2.py`). The model finds the cord with `sc_crop`; its box around the cord is saved as `*_cropbox.nii.gz` and used to crop the QC reports
+3. ~~SMS acquisitions only (`+sms2`): correct even/odd slice AP jitter (`destripe_slices_img`, using `moco_params_y`).~~ Disabled (`DESTRIPE_SMS = False` in `preprocessing_workflow.py`): that jitter turned out to be introduced by the previous moco-dl model (`sct_fmri_moco -dl`), not present in the raw data, and the new model does not introduce it. When enabled, the destriped 4D volume is swapped into the canonical `*_moco.nii.gz` path and the original moco output is kept as `*_moco_not-destriped.nii.gz`.
+4. Segment cord on moco mean (`sct_deepseg`)
+5. Register PAM50 → REST moco mean (`sct_register_multimodal` via `coreg_img2PAM50`, initwarp = T2w PAM50 warp)
 
 **Functional — MOTOR acquisitions** (`shimSlice+3mm`, `shimSlice+1mm+sms2`)
 
-These share the same FOV as the matching REST scan, so the REST segmentation is reused:
-1. Moco (temporal mean → centerline → `sct_fmri_moco`)
-2. **SMS acquisitions only (`+sms2`)**: destripe, same as REST above — required since MOTOR is registered to the (destriped) REST moco mean in the next step
-3. Register REST moco mean → MOTOR moco mean (`sct_register_multimodal`, affine, output saved under `sct_register_rest2motor/`)
-4. Warp REST cord segmentation into MOTOR space via that registration
-5. Map PAM50 into MOTOR space by composing REST's PAM50 warp with the REST→MOTOR warp (`sct_apply_transfo -w PAM50_to_REST -w REST_to_MOTOR`) — no new registration needed
+Processed exactly like REST, independently of it: moco, segmentation, and registration to PAM50 driven by the MOTOR scan's own segmentation (#118).
 
-If no matching REST exists for this acquisition, falls back to full independent processing.
+**Which segmentation is used:** for both REST and MOTOR, the manual segmentation in `derivatives/manual/` is used when it exists. As of ds007932 1.3.0 that covers every acquisition except MOTOR `shimSlice+3mm` of sub-101, where the pipeline falls back to `sct_deepseg`.
 
 **Derived — `+avg3mm`** (slice-averaged, REST only)
 
@@ -179,17 +207,14 @@ The 1mm data is z-smoothed with a Gaussian kernel to match the 3mm point spread 
 
 | Acquisition | Segmentation source | PAM50 warp source |
 |---|---|---|
-| REST | `sct_deepseg` on REST moco mean | independent registration |
-| MOTOR | warped from REST via `sct_register_rest2motor` | composed from REST PAM50 warp + REST→MOTOR registration |
+| REST, MOTOR | manual (`derivatives/manual/`), else `sct_deepseg` on the moco mean | independent registration, driven by that segmentation |
 | `+avg3mm` | copied from 1mm source | not needed (native space only) |
 | `+smooth3mm` | copied from 1mm source | copied from 1mm source |
 
 </details>
 
 ```bash
-bash "${PATH_CODE}/code/run_all_processing.sh" \
-  --path-data "${PATH_DATA}" --path-code "${PATH_CODE}" \
-  --tasks motor --preprocess
+bash "${PATH_CODE}/code/run_all_processing.sh" --path-data "${PATH_DATA}" --path-code "${PATH_CODE}" --tasks motor --preprocess
 ```
 
 <details>
@@ -202,11 +227,9 @@ After running preprocessing, open the QC report (`derivatives/processing/qc/inde
 | 1 | T2\*w anat cord segmentation | search `T2star_seg`, filter function `sct_deepseg` | `sub-<ID>/anat/<filename>_label-SC_seg.nii.gz` |
 | 2 | Vertebral disc labels (totalspineseg) | search `totalspineseg`, filter function `sct_label_utils` (see [#45](https://github.com/shimming-toolbox/spine_7t_fmri_1mm_vs_3mm/issues/45), [#61](https://github.com/shimming-toolbox/spine_7t_fmri_1mm_vs_3mm/issues/61), [#63](https://github.com/shimming-toolbox/spine_7t_fmri_1mm_vs_3mm/issues/63)) | `sub-<ID>/anat/<filename>_label-discs_dlabel.nii.gz` |
 | 3 | Anat-to-template registration | search `register_to_template`, filter contrast to **Anat** only | re-run with corrected seg/labels from steps 1–2 |
-| 4 | Moco centerline (motion-correction mask) | search `_bold_tmean_centerline` | `sub-<ID>/func/<filename>_tmean_centerline.nii.gz` |
-| 5 | Motion correction (`sct_fmri_moco`) | filter function **sct_fmri_moco**, scroll through all entries | re-run moco with corrected centerline from step 4 |
-| 6 | Functional cord segmentation (**REST only** — MOTOR seg is derived from this; no CSF mask needed) | search `_bold_moco_mean_seg`, filter function `sct_deepseg` | `sub-<ID>/func/<filename>_bold_moco_mean_label-SC_seg.nii.gz` |
-| 7 | Rest-to-motor registration | search `sct_register_rest2motor` | re-run with corrected seg from step 6 |
-| 8 | EPI-to-template registration | search `PAM50_t2_reg` | re-run with corrected seg from step 6 |
+| 4 | Motion correction | filter function **sct_fmri_moco**, scroll through all entries | report problems on [ivadomed/moco-dl](https://github.com/ivadomed/moco-dl/issues) (no manual input: the model locates the cord itself) |
+| 5 | Functional cord segmentation (REST and MOTOR; no CSF mask needed) | search `_bold_moco_mean_seg`, filter function `sct_deepseg` | `sub-<ID>/func/<filename>_bold_moco_mean_label-SC_seg.nii.gz` |
+| 6 | EPI-to-template registration | search `PAM50_t2_reg` | re-run with corrected seg from step 5 |
 
 After saving any corrected file, re-run preprocessing with `--redo` so that downstream steps pick up the correction.
 
@@ -222,11 +245,7 @@ Unlike `export_manual_correction.py`, this does not copy any files — it just r
 Alongside `cohort.csv`, it also writes a `cohort.json` sidecar (same basename, `.json` extension). This isn't optional: without it, slicer-cart silently resets its internal case/resource maps on load and the task cannot start (see [neuropoly/slicer-cart#201](https://github.com/neuropoly/slicer-cart/issues/201)). **Keep the `.json` file next to the `.csv` file** whenever you move, copy, or share the cohort.
 
 ```bash
-python "${PATH_CODE}/code/generate_slicercart_cohort.py" \
-  --path-data "${PATH_DATA}" \
-  --output cohort.csv \
-  --exclude task-motor \
-  --no-seg
+python "${PATH_CODE}/code/generate_slicercart_cohort.py" --path-data "${PATH_DATA}" --output cohort.csv --exclude task-motor --no-seg
 ```
 
 | Flag | Description |
@@ -272,9 +291,7 @@ Runs `firstlevel_workflow.py`. For each subject and acquisition:
 3. Generate the EPI comparison figure across shimming conditions
 
 ```bash
-bash "${PATH_CODE}/code/run_all_processing.sh" \
-  --path-data "${PATH_DATA}" --path-code "${PATH_CODE}" \
-  --tasks motor --firstlevel
+bash "${PATH_CODE}/code/run_all_processing.sh" --path-data "${PATH_DATA}" --path-code "${PATH_CODE}" --tasks motor --firstlevel
 ```
 
 ---
@@ -290,9 +307,7 @@ Runs `secondlevel_workflow.py`. Across subjects:
 5. Intraclass correlation coefficient (ICC) for test-retest reproducibility
 
 ```bash
-bash "${PATH_CODE}/code/run_all_processing.sh" \
-  --path-data "${PATH_DATA}" --path-code "${PATH_CODE}" \
-  --tasks motor --secondlevel
+bash "${PATH_CODE}/code/run_all_processing.sh" --path-data "${PATH_DATA}" --path-code "${PATH_CODE}" --tasks motor --secondlevel
 ```
 
 Two optional flags control the permutation test speed vs. precision trade-off:
@@ -304,9 +319,7 @@ Two optional flags control the permutation test speed vs. precision trade-off:
 
 Example for a high-precision run:
 ```bash
-bash "${PATH_CODE}/code/run_all_processing.sh" \
-  --path-data "${PATH_DATA}" --path-code "${PATH_CODE}" \
-  --tasks motor --secondlevel --n-perm 10000 --n-jobs 10
+bash "${PATH_CODE}/code/run_all_processing.sh" --path-data "${PATH_DATA}" --path-code "${PATH_CODE}" --tasks motor --secondlevel --n-perm 10000 --n-jobs 10
 ```
 
 ---
@@ -316,7 +329,5 @@ bash "${PATH_CODE}/code/run_all_processing.sh" \
 Runs `figures_workflow.py`. Generates all figures from the processed data.
 
 ```bash
-bash "${PATH_CODE}/code/run_all_processing.sh" \
-  --path-data "${PATH_DATA}" --path-code "${PATH_CODE}" \
-  --figures
+bash "${PATH_CODE}/code/run_all_processing.sh" --path-data "${PATH_DATA}" --path-code "${PATH_CODE}" --figures
 ```
