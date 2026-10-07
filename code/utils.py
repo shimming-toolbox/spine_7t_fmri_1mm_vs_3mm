@@ -540,7 +540,7 @@ def compute_SNR(i_file, mask_file):
 def get_latest_dir(base_dir):
     """
     Returns the path to the latest 'date' folder inside:
-    qc_dir/sub-ID/func/ses_name/task_name/run_name/sct_get_centerline/
+    qc_dir/sub-ID/func/ses_name/task_name/run_name/<sct_function>/
     """
     
     # Gather candidate folders

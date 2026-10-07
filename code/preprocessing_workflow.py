@@ -43,7 +43,6 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--ids", nargs='+', default=[""])
 parser.add_argument("--tasks", nargs='+', default=[""])
 parser.add_argument("--verbose", default="False")
-parser.add_argument("--manual_centerline", default="False")
 parser.add_argument("--auto_vert_labels", default="True")
 parser.add_argument("--redo", default="True")
 parser.add_argument("--path-data", required=True)
@@ -52,7 +51,6 @@ args = parser.parse_args()
 IDs = args.ids
 tasks = args.tasks
 verbose = args.verbose.lower() == "true"
-manual_centerline = args.manual_centerline.lower() == "true"
 auto_vert_labels = args.auto_vert_labels.lower() == "true"
 redo = args.redo.lower() == "true"
 path_data = os.path.abspath(args.path_data)
@@ -65,7 +63,6 @@ print("=== Preprocessing parameters ===", flush=True)
 print("Participant IDs: ", IDs, flush=True)
 print("Tasks to process: ", tasks, flush=True)
 print("Verbose: ", verbose, flush=True)
-print("Manual centerline: ", manual_centerline, flush=True)
 print("Auto vertebral labels: ", auto_vert_labels, flush=True)
 print("Redo steps: ", redo, flush=True)
 print("================================", flush=True)
@@ -116,9 +113,7 @@ def destripe_if_sms(ID, tag, moco_f, moco_mean_f, redo, verbose):
     for "*_moco.nii.gz" (tSNR, denoising, first-level GLM) automatically gets
     destriped data too, with no changes needed outside this function (#68).
 
-    Used for both REST and MOTOR acquisitions: MOTOR is registered to REST
-    (see epi_derive_seg_from_rest), so MOTOR must be destriped too, or that
-    registration is degraded by residual jitter only present on one side.
+    Used for both REST and MOTOR acquisitions.
     """
     if not DESTRIPE_SMS or "sms" not in tag.lower():
         return moco_mean_f
@@ -144,30 +139,17 @@ def destripe_if_sms(ID, tag, moco_f, moco_mean_f, redo, verbose):
     return moco_mean_f
 
 
-def epi_full_processing(ID, func_file, tag, manual_centerline, warpT2w_PAM50_files, params_moco, o_dir, redo, verbose):
-    # ------------------------------------------------------------------
-    # ------ Create mask around the cord for moco
-    # ------------------------------------------------------------------
+def epi_full_processing(ID, func_file, tag, warpT2w_PAM50_files, params_moco, o_dir, redo, verbose):
+    # Temporal mean of the raw data: reference for the moco of additional runs of this acquisition
     o_img = os.path.join(o_dir, os.path.basename(func_file).split(".")[0] + "_tmean.nii.gz")
-    mean_func_f = utils.tmean_img(ID=ID, i_img=func_file, o_img=o_img, verbose=False)
-    ctrl_sc_file, mask_sc_file = preprocess_Sc.moco_mask(ID=ID,
-                                                         i_img=mean_func_f,
-                                                         mask_size_mm=35,
-                                                         task_name=tag,
-                                                         manual=manual_centerline,
-                                                         redo_ctrl=redo,
-                                                         redo_mask=redo,
-                                                         verbose=verbose)
-
-    print(mask_sc_file)
-    print(f'=== Moco masks : Done  {ID} {tag} {run_name} ===', flush=True)
+    utils.tmean_img(ID=ID, i_img=func_file, o_img=o_img, verbose=False)
 
     # ------------------------------------------------------------------
     # ------ Run moco
     # ------------------------------------------------------------------
+    # The moco-dl model locates the cord itself (sc_crop); its box around the cord crops the QC reports.
     moco_f, moco_mean_f, qc_dir = preprocess_Sc.moco(ID=ID,
                                                      i_img=func_file,
-                                                     mask_img=mask_sc_file,
                                                      task_name=tag,
                                                      run_name=run_name,
                                                      params=params_moco,
@@ -189,7 +171,7 @@ def epi_full_processing(ID, func_file, tag, manual_centerline, warpT2w_PAM50_fil
                                                   i_img=moco_mean_f,
                                                   task_name=tag,
                                                   img_type="func",
-                                                  mask_qc=mask_sc_file,
+                                                  mask_qc=preprocess_Sc.cropbox_file(moco_f),
                                                   redo=redo,
                                                   redo_qc=redo,  # should be true if you have done manual correction
                                                   verbose=verbose)
@@ -216,139 +198,11 @@ def epi_full_processing(ID, func_file, tag, manual_centerline, warpT2w_PAM50_fil
     copy_warping_fields_from_ref_tag(ID, tag, tag, preprocessing_dir)
 
 
-def epi_derive_seg_from_rest(ID, rest_tag, func_file, tag, params_moco, o_dir, redo, verbose):
-    """Moco MOTOR, register REST mean-moco -> MOTOR mean-moco, warp REST seg to MOTOR space."""
-    # Moco for MOTOR using its own mean as reference
-    o_img = os.path.join(o_dir, os.path.basename(func_file).split(".")[0] + "_tmean.nii.gz")
-    mean_func_f = utils.tmean_img(ID=ID, i_img=func_file, o_img=o_img, verbose=False)
-    ctrl_sc_file, mask_sc_file = preprocess_Sc.moco_mask(ID=ID,
-                                                         i_img=mean_func_f,
-                                                         mask_size_mm=35,
-                                                         task_name=tag,
-                                                         manual=manual_centerline,
-                                                         redo_ctrl=redo,
-                                                         redo_mask=redo,
-                                                         verbose=verbose)
-    moco_f, moco_mean_f, qc_dir = preprocess_Sc.moco(ID=ID,
-                                                      i_img=func_file,
-                                                      mask_img=mask_sc_file,
-                                                      task_name=tag,
-                                                      run_name=run_name,
-                                                      params=params_moco,
-                                                      verbose=verbose,
-                                                      redo=redo,
-                                                      use_dl=True)
-    print(f'=== Moco : Done  {ID} {tag} {run_name} ===', flush=True)
-
-    # Destripe (correct even/odd slice AP jitter from SMS). MOTOR is registered to REST
-    # below, so it must be destriped too, same as REST, or the registration is degraded
-    # by residual jitter only present on the MOTOR side.
-    moco_mean_f = destripe_if_sms(ID=ID, tag=tag, moco_f=moco_f, moco_mean_f=moco_mean_f, redo=redo, verbose=verbose)
-
-    # Locate REST mean-moco and segmentations
-    rest_moco_mean_candidates = sorted(glob.glob(os.path.join(
-        preprocessing_dir.format(ID), "func", rest_tag, "sct_fmri_moco",
-        f"sub-{ID}_{rest_tag}_*bold_moco_mean.nii.gz")))
-    if not rest_moco_mean_candidates:
-        raise RuntimeError(f"REST moco mean not found for {rest_tag} sub-{ID}; cannot derive MOTOR segmentation.")
-    rest_moco_mean = rest_moco_mean_candidates[0]
-    rest_sc_seg  = os.path.join(preprocessing_dir.format(ID), "func", rest_tag,
-                                f"sub-{ID}_{rest_tag}_bold_moco_mean_seg.nii.gz")
-
-    # Register REST mean-moco (moving) -> MOTOR mean-moco (fixed)
-    reg_dir = os.path.join(o_dir, "sct_register_rest2motor")
-    os.makedirs(reg_dir, exist_ok=True)
-    warp_rest2motor  = os.path.join(reg_dir, f"sub-{ID}_{tag}_from-rest_to-motor_xfm.nii.gz")
-    warp_motor2rest  = os.path.join(reg_dir, f"sub-{ID}_{tag}_from-motor_to-rest_xfm.nii.gz")
-    if not os.path.exists(warp_rest2motor) or not os.path.exists(warp_motor2rest) or redo:
-        cmd_reg = (f"sct_register_multimodal -i {rest_moco_mean} -d {moco_mean_f}"
-                   f" -dseg {mask_sc_file}"
-                   f" -param step=1,type=im,algo=affine,metric=CC -ofolder {reg_dir}"
-                   f" -qc {preprocess_Sc.qc_dir} -qc-subject sub-{ID} -qc-contrast {tag} -v 0")
-        os.system(cmd_reg)
-        # sct_register_multimodal names warps after src/dest basenames
-        src_stem  = os.path.basename(rest_moco_mean).replace(".nii.gz", "")
-        dest_stem = os.path.basename(moco_mean_f).replace(".nii.gz", "")
-        fwd = glob.glob(os.path.join(reg_dir, f"warp_{src_stem}2*.nii.gz"))
-        inv = glob.glob(os.path.join(reg_dir, f"warp_{dest_stem}2*.nii.gz"))
-        if not fwd or not inv:
-            raise RuntimeError(f"REST<->MOTOR registration warps not found in {reg_dir}")
-        os.rename(fwd[0], warp_rest2motor)
-        os.rename(inv[0], warp_motor2rest)
-
-    # Apply warp to REST SC segmentation -> MOTOR space
-    motor_sc_seg = os.path.join(o_dir, f"sub-{ID}_{tag}_bold_moco_mean_seg.nii.gz")
-    if not os.path.exists(motor_sc_seg) or redo:
-        cmd_apply = (f"sct_apply_transfo -i {rest_sc_seg} -d {moco_mean_f}"
-                     f" -w {warp_rest2motor} -o {motor_sc_seg} -x nn -v 0")
-        os.system(cmd_apply)
-    print(f'=== Derived seg from REST: Done  {ID} {tag} {run_name} ===', flush=True)
-
-    # Compose PAM50<->MOTOR warp files from REST's PAM50 warp + REST<->MOTOR registration.
-    # No new sct_register_multimodal call needed: the REST registration is valid for MOTOR
-    # since they share the same FOV, and any residual offset is captured by sct_register_rest2motor.
-    rest_to_pam50 = os.path.join(preprocessing_dir.format(ID), "func", rest_tag,
-                                  f"sub-{ID}_{rest_tag}_from-func_to_PAM50_mode-image_xfm.nii.gz")
-    pam50_to_rest = os.path.join(preprocessing_dir.format(ID), "func", rest_tag,
-                                  f"sub-{ID}_{rest_tag}_from-PAM50_to_func_mode-image_xfm.nii.gz")
-    pam50_t2 = os.path.join(preprocess_Sc.code_dir, "template", preprocess_Sc.config["PAM50_t2"])
-
-    run_tag_str = f"_{run_name}" if run_name else ""
-    func2pam50_dir = os.path.join(o_dir, "sct_register_multimodal")
-    os.makedirs(func2pam50_dir, exist_ok=True)
-    motor_to_pam50 = os.path.join(func2pam50_dir,
-                                   f"sub-{ID}_{tag}{run_tag_str}_from-func_to_PAM50_mode-image_xfm.nii.gz")
-    pam50_to_motor = os.path.join(func2pam50_dir,
-                                   f"sub-{ID}_{tag}{run_tag_str}_from-PAM50_to_func_mode-image_xfm.nii.gz")
-
-    # isct_ComposeMultiTransform applies transforms right-to-left (last arg applied first).
-    # motor_to_pam50 (pull: PAM50->MOTOR, for stat map normalization in firstlevel):
-    #   PAM50->REST (rest_to_pam50) then REST->MOTOR (warp_motor2rest)
-    if not os.path.exists(motor_to_pam50) or redo:
-        cmd = (f"isct_ComposeMultiTransform 3 {motor_to_pam50} -R {pam50_t2}"
-               f" {warp_motor2rest} {rest_to_pam50}")
-        os.system(cmd)
-
-    # pam50_to_motor (pull: MOTOR->PAM50, for copy_warping_fields_from_ref_tag):
-    #   MOTOR->REST (warp_rest2motor) then REST->PAM50 (pam50_to_rest)
-    if not os.path.exists(pam50_to_motor) or redo:
-        cmd = (f"isct_ComposeMultiTransform 3 {pam50_to_motor} -R {moco_mean_f}"
-               f" {pam50_to_rest} {warp_rest2motor}")
-        os.system(cmd)
-
-    copy_warping_fields_from_ref_tag(ID, tag, tag, preprocessing_dir)
-
-    # Generate QC: bring PAM50 T2 into MOTOR space by chaining pam50_to_rest then warp_rest2motor.
-    # Use isct_antsApplyTransforms directly: sct_apply_transfo silently drops all but the last -w
-    # when multiple displacement fields are passed. ANTs applies -t flags right-to-left (last first),
-    # so listing pam50_to_rest before warp_rest2motor means warp_rest2motor is applied first
-    # (MOTOR→REST), then pam50_to_rest (REST→PAM50) — correct pull-convention composition.
-    pam50_t2_reg = os.path.join(func2pam50_dir, f"PAM50_t2_reg{run_tag_str}.nii.gz")
-    if not os.path.exists(pam50_t2_reg) or redo:
-        cmd = (f"isct_antsApplyTransforms -d 3 -i {pam50_t2} -o {pam50_t2_reg}"
-               f" -t {pam50_to_rest} -t {warp_rest2motor}"
-               f" -r {moco_mean_f} -n 'BSpline[3]'")
-        os.system(cmd)
-    cmd_qc = (f"sct_qc -i {moco_mean_f} -s {motor_sc_seg} -p sct_register_multimodal"
-              f" -d {pam50_t2_reg} -qc {preprocess_Sc.qc_dir} -qc-subject sub-{ID}"
-              f" -qc-contrast {tag} -v 0")
-    os.system(cmd_qc)
-
-    # Warp MOTOR moco mean into PAM50 space — used by MI computation in figures_workflow.
-    moco_mean_base = os.path.basename(moco_mean_f).replace(".nii.gz", "")
-    coreg_in_pam50 = os.path.join(func2pam50_dir, f"{moco_mean_base}_coreg_in_PAM50.nii.gz")
-    if not os.path.exists(coreg_in_pam50) or redo:
-        cmd = (f"sct_apply_transfo -i {moco_mean_f} -d {pam50_t2}"
-               f" -w {motor_to_pam50} -o {coreg_in_pam50} -x spline -v 0")
-        os.system(cmd)
-    print(f'=== PAM50 registration (MOTOR, warp composition): Done  {ID} {tag} {run_name} ===', flush=True)
-
-
 def _get_seg_file(ID, source_tag):
     """Return path to SC segmentation for source_tag, preferring manual over auto.
 
-    Checks sct_deepseg subfolder first (REST, produced by epi_full_processing),
-    then falls back to the tag root (MOTOR, produced by epi_derive_seg_from_rest).
+    Checks the sct_deepseg subfolder first (produced by epi_full_processing), then falls
+    back to the tag root (where copy_segmentation_from_ref_tag puts the final segmentation).
     """
     tag_dir = os.path.join(preprocessing_dir.format(ID), "func", source_tag)
     manual_files = glob.glob(os.path.join(manual_dir, f"sub-{ID}", "func",
@@ -546,7 +400,7 @@ for ID_nb, ID in enumerate(IDs):
 
     #---------------Func preprocessing ---------------------------------------------------
     #------ Select func data
-    # Sort REST before MOTOR so that MOTOR segmentation can be derived from REST.
+    # REST before MOTOR (no dependency between them; keeps the logs in a consistent order).
     for task_name in sorted(config["design_exp"]["task_names"], key=lambda t: 0 if t == 'rest' else 1):
         for acq_name in config["design_exp"]["acq_names"]:
             tag = "task-" + task_name + "_acq-" + acq_name
@@ -579,25 +433,11 @@ for ID_nb, ID in enumerate(IDs):
                 params['acq'] = acq_name
                 acq_parameters.append(params)
 
-                if task_name == 'rest' and i_func == 0:
-                    # REST: full processing (moco + sct_deepseg + PAM50 registration).
-                    # REST mean-moco is cleaner (no task confounds), making it the better
-                    # substrate for segmentation. MOTOR will derive its seg from this.
-                    epi_full_processing(ID, func_file, tag, manual_centerline, warpT2w_PAM50_files, params_moco, o_dir, redo, verbose)
-
-                elif task_name == 'motor' and i_func == 0:
-                    # MOTOR: moco using own mean, then register REST mean-moco -> MOTOR mean-moco
-                    # and warp the REST segmentation into MOTOR space.
-                    rest_tag = "task-rest_acq-" + acq_name
-                    rest_moco_mean_candidates = glob.glob(os.path.join(
-                        preprocessing_dir.format(ID), "func", rest_tag, "sct_fmri_moco",
-                        f"sub-{ID}_{rest_tag}_*bold_moco_mean.nii.gz"))
-                    if rest_moco_mean_candidates:
-                        epi_derive_seg_from_rest(ID, rest_tag, func_file, tag, params_moco, o_dir, redo, verbose)
-                    else:
-                        # REST not available for this acq (e.g. sub-099 1mm) — fall back to full processing.
-                        print(f'No REST moco mean found for {rest_tag}; running full processing for MOTOR.', flush=True)
-                        epi_full_processing(ID, func_file, tag, manual_centerline, warpT2w_PAM50_files, params_moco, o_dir, redo, verbose)
+                if i_func == 0:
+                    # REST and MOTOR: full processing (moco + segmentation + PAM50 registration).
+                    # The segmentation is the manual one from derivatives/manual when it exists
+                    # (all REST and MOTOR acquisitions as of ds007932 1.3.0), else sct_deepseg (#118).
+                    epi_full_processing(ID, func_file, tag, warpT2w_PAM50_files, params_moco, o_dir, redo, verbose)
 
                 else:
                     # Additional runs (i_func > 0): run moco referencing own task's first run,
@@ -608,18 +448,10 @@ for ID_nb, ID in enumerate(IDs):
                         print(f'=== Using {ref_func_file} as reference for moco ===', flush=True)
                     except IndexError as e:
                         print(f'No reference file found for {ref_tag} in raw data.', flush=True)
-                        epi_full_processing(ID, func_file, tag, manual_centerline, warpT2w_PAM50_files, params_moco, o_dir, redo, verbose)
+                        epi_full_processing(ID, func_file, tag, warpT2w_PAM50_files, params_moco, o_dir, redo, verbose)
                         continue
-                    try:
-                        ref_mask_file = glob.glob(os.path.join(preprocessing_dir.format(ID), "func", ref_tag, "sct_get_centerline", f"sub-{ID}_{ref_tag}_*tmean_mask.nii.gz"))[0]
-                        print(f'=== Using {ref_mask_file} as reference mask for moco ===', flush=True)
-                    except IndexError as e:
-                        print(f'No reference mask file found for {ref_tag} in raw data.', flush=True)
-                        raise e
-
                     moco_f, moco_mean_f, qc_dir = preprocess_Sc.moco(ID=ID,
                                                                 i_img=func_file,
-                                                                mask_img=ref_mask_file,
                                                                 ref_img=ref_func_file,
                                                                 task_name=tag,
                                                                 run_name=run_name,
@@ -634,8 +466,7 @@ for ID_nb, ID in enumerate(IDs):
                 print(f'=== Func registration : Done  {ID} {tag} {run_name} ===')
 
     #---------------Derived acquisitions (slice-averaged or z-smoothed) -------------------
-    # Sort REST before MOTOR so MOTOR-derived can use the MOTOR source seg
-    # (which was itself derived from REST via registration in the loop above).
+    # Derived acquisitions reuse the segmentation and PAM50 warp of their source acquisition.
     for derived_acq_name, derived_info in config.get("derived_acq", {}).items():
         source_acq = derived_info["source_acq"]
         n_slices_avg = derived_info.get("n_slices_avg")

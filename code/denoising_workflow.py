@@ -31,7 +31,6 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--ids", nargs='+', default=[""])
 parser.add_argument("--tasks", nargs='+', default=[""])
 parser.add_argument("--verbose", default="False")
-parser.add_argument("--manual_centerline", default="False")
 parser.add_argument("--auto_vert_labels", default="True")
 parser.add_argument("--redo", default="True")
 parser.add_argument("--path-data", required=True)
@@ -40,7 +39,6 @@ args = parser.parse_args()
 IDs = args.ids
 tasks = args.tasks
 verbose = args.verbose.lower() == "true"
-manual_centerline = args.manual_centerline.lower() == "true"
 auto_vert_labels = args.auto_vert_labels.lower() == "true"
 redo = args.redo.lower() == "true"
 path_data = os.path.abspath(args.path_data)
