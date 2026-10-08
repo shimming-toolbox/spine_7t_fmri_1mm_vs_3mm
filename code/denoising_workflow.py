@@ -38,7 +38,6 @@ parser.add_argument("--path-data", required=True)
 args = parser.parse_args()
 
 IDs = args.ids
-tasks = args.tasks
 verbose = args.verbose.lower() == "true"
 auto_vert_labels = args.auto_vert_labels.lower() == "true"
 redo = args.redo.lower() == "true"
@@ -55,9 +54,6 @@ if IDs == [""]:
         new_IDs.append(ID)
 
     IDs = new_IDs
-
-if tasks != [""]:
-    config["design_exp"]["task_names"] = tasks
 
 #Import scripts
 sys.path.append(os.path.join(path_code, "code"))  # Change this line according to your directory
@@ -82,6 +78,8 @@ print("=== Denoising script Start ===", flush=True)
 print("Participant(s) included : ", IDs, flush=True)
 print("===================================", flush=True)
 print("")
+config["design_exp"]["task_names"] = ["motor"]  # Run denoising only for motor task
+config["design_exp"]["acq_names"] =["shimSlice+3mm","shimSlice+1mm+sms2"]  # Run denoising only for these acquisitions
 
 for ID_nb,ID in enumerate(IDs):
     print("", flush=True)
