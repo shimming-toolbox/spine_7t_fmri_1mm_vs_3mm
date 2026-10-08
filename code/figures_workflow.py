@@ -72,13 +72,13 @@ except Exception as e:
     print(f"WARNING: EPI comparison figure skipped: {e}", flush=True)
 
 # ------------------------------------------------------------------
-# 2. First-level maps (shimBase vs. shimSlice per participant)
+# 2. First-level maps (shimSlice3mm vs. shimSlice1mm per participant)
 # ------------------------------------------------------------------
 print("", flush=True)
 print("=== First-level maps ===", flush=True)
 fig_dir_first = os.path.join(config["raw_dir"], config["figures_dir"]["main_dir"], "first_level")
 os.makedirs(fig_dir_first, exist_ok=True)
-common_mask_fname = os.path.join(first_level_dir.format('glm', "").split("sub")[0], "common_mask_PAM50.nii.gz")
+common_mask_fname = os.path.join(path_code, "template",config["PAM50_cord_2ndlevel"])
 
 # Compare native 3mm vs. 1mm(smooth3mm) for a single shim condition (shimSlice), rather
 # than shimBase vs shimSlice at 3mm: shimBase MOTOR 1mm data only exists for sub-099, so
@@ -113,7 +113,7 @@ try:
         output_fname=os.path.join(fig_dir_first, f"first_level_task_by_runs_n{len(i_fnames_by_runs)}.png"),
         background_fname=os.path.join(path_code, "template", config["PAM50_t2"]),
         mask_fname=common_mask_fname,
-        titles=["3mm", "1mm smoothed"],
+        titles=["3mm", "1mm zsmoothed"],
         task_name=tag,
         participant_ids=used_ids,
         n_cols=4,
