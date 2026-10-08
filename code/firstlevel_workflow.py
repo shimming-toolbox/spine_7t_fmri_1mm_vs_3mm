@@ -35,7 +35,6 @@ parser.add_argument("--path-data", required=True)
 args = parser.parse_args()
 
 IDs = args.ids
-tasks = args.tasks
 verbose = args.verbose.lower() == "true"
 redo = args.redo.lower() == "true"
 path_data = os.path.abspath(args.path_data)
@@ -51,9 +50,6 @@ if IDs == [""]:
         new_IDs.append(ID)
 
     IDs = new_IDs
-
-#if tasks != [""]:
-#    config["design_exp"]["task_names"] = tasks
 
 #Import scripts
 sys.path.append(os.path.join(path_code, "code")) # Change this line according to your directory
@@ -77,7 +73,8 @@ first_level_dir = os.path.join(config["raw_dir"], config["first_level"]["dir"])
 #------------------------------------------------------------------
 #------ III. Run First level
 #------------------------------------------------------------------
-config["design_exp"]["task_names"] = ["motor"]
+config["design_exp"]["task_names"] = ["motor"] # run first level only for motor task
+config["design_exp"]["acq_names"]= ["shimSlice+1mm+sms2","shimSlice+3mm+sms2"] # run first level only for shimSlice+1mm+sms2 and shimSlice+3mm+sms2 acquisitions
 print("")
 print("=== First level analysis script Start ===", flush=True)
 print("Participant(s) included : ", IDs, flush=True)
@@ -109,13 +106,8 @@ for ID_nb, ID in enumerate(IDs):
                 if denoised_candidates:
                     denoised_fmri = denoised_candidates[0]
                 else:
-                    run_suffix = f"_{run_name}" if run_name else ""
-                    moco_candidates = glob.glob(os.path.join(preprocessing_dir.format(ID), 'func', tag, 'sct_fmri_moco', f'sub-{ID}_{tag}{run_suffix}_bold_moco.nii.gz'))
-                    if not moco_candidates:
-                        print(f"WARNING: No denoised or moco file found for sub-{ID} {tag}, skipping.", flush=True)
-                        continue
-                    denoised_fmri = moco_candidates[0]
-                    print(f"INFO: No denoised file found for sub-{ID} {tag}, falling back to moco output.", flush=True)
+                    raise RuntimeError(f"No denoised file found for sub-{ID} {tag}", flush=True)
+
                 cord_seg_file = glob.glob(os.path.join(preprocessing_dir.format(ID), 'func',tag, config["preprocess_f"]["func_seg"].format(ID,tag,"")))[0]
                 warp_file = os.path.join(preprocessing_dir.format(ID), 'func', tag, f"sub-{ID}_{tag}_from-func_to_PAM50_mode-image_xfm.nii.gz")
 
