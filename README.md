@@ -282,7 +282,23 @@ When opening the cohort in slicer-cart, set its data path to `${PATH_DATA}` — 
 
 ---
 
-### Step 2 — First-level analysis (`--firstlevel`)
+### Step 2 — denoising (`--denoising`)
+
+Runs `denoising_workflow.py`. For each subject, motor task and shimSlice acquisition:
+
+1. Calculate the noise regressors (motion parameters, outliers, CompCor) from the motion-corrected functional data
+2. Combine all regressors into a single design matrix 
+3. Apply the design matrix to the motion-corrected functional data and apply filtering to produce denoised data
+4. Apply smoothing to the denoised data to produce smoothed denoised data 2x the slice thickness (2mm for 1mm data, 6mm for 3mm data)
+
+```bash
+bash "${PATH_CODE}/code/run_all_processing.sh" --path-data "${PATH_DATA}" --path-code "${PATH_CODE}" --tasks motor --denoising
+```
+
+---
+---
+
+### Step 3 — First-level analysis (`--firstlevel`)
 
 Runs `firstlevel_workflow.py`. For each subject and acquisition:
 
@@ -296,7 +312,7 @@ bash "${PATH_CODE}/code/run_all_processing.sh" --path-data "${PATH_DATA}" --path
 
 ---
 
-### Step 3 — Second-level analysis (`--secondlevel`)
+### Step 4 — Second-level analysis (`--secondlevel`)
 
 Runs `secondlevel_workflow.py`. Across subjects:
 
