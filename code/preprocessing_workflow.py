@@ -175,6 +175,15 @@ def epi_full_processing(ID, func_file, tag, warpT2w_PAM50_files, params_moco, o_
                                                   redo=redo,
                                                   redo_qc=redo,  # should be true if you have done manual correction
                                                   verbose=verbose)
+    preprocess_Sc.segmentation(ID=ID,
+                               i_img=moco_mean_f,
+                               task_name=tag,contrast_anat="t2s",
+                               img_type="func",
+                               tissue="csf",
+                               redo_qc=redo, # should be true if you have done manual correction
+                               redo=redo,
+                               verbose=verbose)
+
 
     print(f'=== Func segmentation : Done  {ID} {tag} {run_name} ===', flush=True)
 
@@ -195,6 +204,7 @@ def epi_full_processing(ID, func_file, tag, warpT2w_PAM50_files, params_moco, o_
 
     # Copy the segmentation and warping field to where the final files are expected to be
     copy_segmentation_from_ref_tag(ID, tag, tag, manual_dir, preprocessing_dir)
+    copy_segmentation_from_ref_tag(ID, tag, tag, manual_dir, preprocessing_dir,label="CSF")
     copy_warping_fields_from_ref_tag(ID, tag, tag, preprocessing_dir)
 
 

@@ -212,19 +212,24 @@ import time as _time
 values_csv_pair={};metrics_csv_pair={}
 for cluster_corr in [0.01,0.001]:
     values_csv_pair[cluster_corr]={};metrics_csv_pair[cluster_corr]={}
-    for vox_thr in [0.005]:
+    for vox_thr in [0.05]:
         values_csv_pair[cluster_corr][vox_thr]=[];metrics_csv_pair[cluster_corr][vox_thr]=[]
         for task_name in ["motor"]:
             for acq_name in config["design_exp"]["acq_names"]:
+                
                 i_fnames=[]
                 tag = "task-" + task_name + "_acq-" + acq_name
                 for ID in IDs:
+                    tag = "task-" + task_name + "_acq-" + acq_name
                     raw_func = sorted(glob.glob(os.path.join(config["raw_dir"], f'sub-{ID}', 'func', f'sub-{ID}_{tag}_*bold.nii.gz')))
                     if not raw_func:
                         continue
                     match = re.search(r"_?(run-\d+)", raw_func[0])
                     run_name = match.group(1) if match else ""
+                    if acq_name == "shimSlice+1mm+sms2":
+                        tag = "task-" + task_name + "_acq-" + "shimSlice+1mm+sms2+smooth3mm"  # use the smoothed version for second-level GLM  
                     glm_matches = glob.glob(os.path.join(first_level_dir.format('glm',ID), f"{tag}", f"*{tag}*{run_name}*trial_RH-rest*inTemplate.nii.gz"))
+                    
                     if glm_matches:
                         i_fnames.append(glm_matches[0])
 
@@ -257,80 +262,4 @@ for cluster_corr in [0.01,0.001]:
                 print(f'=== Second level done for : {tag}, cluster: {cluster_corr} vox: {vox_thr} | elapsed: {_time.time()-_t_task:.1f}s ===', flush=True)
                 print("=========================================", flush=True)
 
-# Figure generation moved to figures_workflow.py (run with --figures).
 
-#------------------------------------------------------------------
-#------ compute test-retest reproductibility using ICC
-#------------------------------------------------------------------
-
-# ----------  between shimSlice run01 vs run02 ---
-print("", flush=True)
-print(f'=== ICC between sliceShim run-01 and run-02  start', flush=True)
-print("=========================================", flush=True)
-output_dir = os.path.join(second_level_dir.format("icc"), "shimSlice_run01_vs_run02")
-os.makedirs(output_dir, exist_ok=True)
-i_fnames_by_runs = []
-tag = "task-motor_acq-shimSlice+3mm"
-IDs_2runs = []
-for ID in IDs:
-    raw_func = sorted(glob.glob(os.path.join( config["raw_dir"], f"sub-{ID}", "func", f"sub-{ID}_{tag}_*bold.nii.gz")))
-    
-    # Only keep participants with 2 runs
-    if len(raw_func) != 2:
-        continue
-    IDs_2runs.append(ID)
-    i_fnames_runs = []
-    for fname in raw_func:
-        run_name = re.search(r"_?(run-\d+)", fname).group(1)
-        stat_map = glob.glob(os.path.join(
-            first_level_dir.format("glm",ID), tag, f"*{tag}*{run_name}*trial_RH-rest*inTemplate.nii.gz"
-        ))[0]
-        i_fnames_runs.append(stat_map)
-    
-    i_fnames_by_runs.append(i_fnames_runs)
-
-if not IDs_2runs:
-    print("WARNING: No subjects with 2 runs of shimSlice+3mm — ICC run-01 vs run-02 skipped.", flush=True)
-else:
-    try:
-        glm_ana.run_icc(IDs=IDs_2runs, i_fnames=i_fnames_by_runs, o_dir=output_dir, mask_file=mask, threshold=0, redo=redo)
-    except Exception as e:
-        print(f"WARNING: ICC run-01 vs run-02 failed: {e}", flush=True)
-
-print("", flush=True)
-print(f'=== ICC between sliceShim run-01 and run-02  done', flush=True)
-print("=========================================", flush=True)
-
-# ----------  between shimBase and shimSlice ---
-print("", flush=True)
-print(f'=== ICC between sliceShim and sliceBase  start', flush=True)
-print("=========================================", flush=True)
-if not IDs_2runs:
-    print("WARNING: No subjects with 2 runs — ICC shimBase vs shimSlice skipped.", flush=True)
-else:
-    output_dir = os.path.join(second_level_dir.format("icc"), "shimBase_vs_shimSlice")
-    os.makedirs(output_dir, exist_ok=True)
-    i_fnames_by_runs = []
-    for ID in IDs_2runs:
-        i_fnames_runs = []
-        for acq_name in config["design_exp"]["acq_names"]:
-            tag = "task-motor" + "_acq-" + acq_name
-            raw_func = sorted(glob.glob(os.path.join(config["raw_dir"], f"sub-{ID}", "func", f"sub-{ID}_{tag}_*bold.nii.gz")))
-            if not raw_func:
-                continue
-            match = re.search(r"_?(run-\d+)", raw_func[0])
-            run_name = match.group(1) if match else ""
-            glm_matches = glob.glob(os.path.join(first_level_dir.format("glm", ID), tag, f"*{tag}*{run_name}*trial_RH-rest*inTemplate.nii.gz"))
-            if glm_matches:
-                i_fnames_runs.append(glm_matches[0])
-        if i_fnames_runs:
-            i_fnames_by_runs.append(i_fnames_runs)
-
-    try:
-        icc_maps, icc_maps_s = glm_ana.run_icc(IDs=IDs_2runs, i_fnames=i_fnames_by_runs, o_dir=output_dir, mask_file=mask, threshold=0)
-    except Exception as e:
-        print(f"WARNING: ICC shimBase vs shimSlice failed: {e}", flush=True)
-
-print("", flush=True)
-print(f'=== ICC between sliceShim and sliceBase  done', flush=True)
-print("=========================================", flush=True)

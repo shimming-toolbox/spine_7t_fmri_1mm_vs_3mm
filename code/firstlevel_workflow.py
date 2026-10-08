@@ -16,6 +16,7 @@
 import re, json, sys, os, glob, argparse
 import pandas as pd
 from nilearn.glm import threshold_stats_img
+from nilearn import image
 import nibabel as nib
 import numpy as np
 
@@ -34,13 +35,14 @@ parser.add_argument("--path-data", required=True)
 args = parser.parse_args()
 
 IDs = args.ids
-tasks = args.tasks
 verbose = args.verbose.lower() == "true"
 redo = args.redo.lower() == "true"
 path_data = os.path.abspath(args.path_data)
 
 config["raw_dir"]=path_data
 config["code_dir"]=path_code
+config["design_exp"]["task_names"] = ["motor"] # run first level only for motor task
+config["design_exp"]["acq_names"]= ["shimSlice+3mm","shimSlice+1mm+sms2","shimSlice+1mm+sms2+smooth3mm"] # run first level only for shimSlice+1mm+sms2 and shimSlice+3mm+sms2 acquisitions
 
 participants_tsv = pd.read_csv(os.path.join(path_code, 'config', 'participants.tsv'), sep='\t',dtype={'participant_id': str})
 
@@ -50,9 +52,6 @@ if IDs == [""]:
         new_IDs.append(ID)
 
     IDs = new_IDs
-
-#if tasks != [""]:
-#    config["design_exp"]["task_names"] = tasks
 
 #Import scripts
 sys.path.append(os.path.join(path_code, "code")) # Change this line according to your directory
@@ -76,7 +75,6 @@ first_level_dir = os.path.join(config["raw_dir"], config["first_level"]["dir"])
 #------------------------------------------------------------------
 #------ III. Run First level
 #------------------------------------------------------------------
-config["design_exp"]["task_names"] = ["motor"]
 print("")
 print("=== First level analysis script Start ===", flush=True)
 print("Participant(s) included : ", IDs, flush=True)
@@ -94,191 +92,85 @@ for ID_nb, ID in enumerate(IDs):
     for task_name in config["design_exp"]["task_names"]:
         for acq_name in config["design_exp"]["acq_names"]:
             tag="task-" + task_name + "_acq-" + acq_name
-            raw_func=glob.glob(os.path.join(config["raw_dir"], f'sub-{ID}', 'func', f'sub-{ID}_{tag}_*bold.nii.gz'))
-            for func_file in raw_func:
-                # Check run number if multiple run exists
-                match = re.search(r"_?(run-\d+)", func_file)
-                if match:
-                    run_name=match.group(1)
-                    print(run_name)
-                else:
-                    run_name=""
+            tag_ref="task-" + task_name + "_acq-" + acq_name.replace("+smooth3mm","") if acq_name=="shimSlice+1mm+sms2+smooth3mm" else tag
+            denoised_candidates = glob.glob(os.path.join(denoising_dir.format(ID), tag, config["denoising"]["denoised_dir"],"*_nostd_s.nii.gz"))
+            if denoised_candidates:
+                denoised_fmri = denoised_candidates[0]
+            else:
+                raise RuntimeError(f"No denoised file found for sub-{ID} {tag}. Please check the denoising outputs")
 
-                denoised_candidates = glob.glob(os.path.join(denoising_dir.format(ID), tag, config["denoising"]["denoised_dir"],"*"+run_name+"*_nostd_s.nii.gz"))
-                if denoised_candidates:
-                    denoised_fmri = denoised_candidates[0]
-                else:
-                    run_suffix = f"_{run_name}" if run_name else ""
-                    moco_candidates = glob.glob(os.path.join(preprocessing_dir.format(ID), 'func', tag, 'sct_fmri_moco', f'sub-{ID}_{tag}{run_suffix}_bold_moco.nii.gz'))
-                    if not moco_candidates:
-                        print(f"WARNING: No denoised or moco file found for sub-{ID} {tag}, skipping.", flush=True)
-                        continue
-                    denoised_fmri = moco_candidates[0]
-                    print(f"INFO: No denoised file found for sub-{ID} {tag}, falling back to moco output.", flush=True)
-                cord_seg_file = glob.glob(os.path.join(preprocessing_dir.format(ID), 'func',tag, config["preprocess_f"]["func_seg"].format(ID,tag,"")))[0]
-                warp_file = os.path.join(preprocessing_dir.format(ID), 'func', tag, f"sub-{ID}_{tag}_from-func_to_PAM50_mode-image_xfm.nii.gz")
+            cord_seg_file = glob.glob(os.path.join(preprocessing_dir.format(ID), 'func',tag, config["preprocess_f"]["func_seg"].format(ID,tag,"")))[0]
+            warp_file = os.path.join(preprocessing_dir.format(ID), 'func', tag, f"sub-{ID}_{tag}_from-func_to_PAM50_mode-image_xfm.nii.gz")
 
-                if not os.path.exists(cord_seg_file):
-                    raise RuntimeError(f"No mask file found for subject {ID}, task {tag}. Please check the preprocessing outputs and manual corrections.")
-
-                # Select warp file
-                if not os.path.exists(warp_file):
-                    raise RuntimeError(f"No warp file found for subject {ID}, task {tag}. Please check the preprocessing outputs and manual corrections.")
-
-                events_file=glob.glob(os.path.join(config["raw_dir"], f'sub-{ID}', 'func', f'sub-{ID}_{tag}_*{run_name}*events.tsv'))[0]
-
-                #------ I.2 Run first level GLM
-                stat_maps=glm_ana.run_first_level_glm(ID=ID,
-                                                          i_fname=denoised_fmri,
-                                                          events_file=events_file,
-                                                          mask_file=cord_seg_file,
-                                                          task_name=tag,
-                                                          run_name=run_name,
-                                                          redo=redo,
-                                                          verbose=verbose)
-
-                #------ I.2 Apply correction and extract metrics
-                for i, contrast_fname in enumerate(stat_maps):
-                    # Apply correction
-                    corr_type="fpr";alpha=0.01;cluster=0
-                    
-                    fname_thr_img=stat_maps[i][:-len(".nii.gz")] +f"_{corr_type}_{str(alpha)[2:]}_{str(cluster)}cluster.nii.gz"
-                    
-                    if not os.path.exists(fname_thr_img) or redo:
-                        thresholded_map, threshold = threshold_stats_img(stat_maps[i],
-                                                                        alpha=alpha,
-                                                                        height_control=corr_type,
-                                                                        cluster_threshold=cluster,
-                                                                            two_sided=False)
-                        thresholded_map.to_filename(fname_thr_img)
-   
-                #------ I.3 Normalization 
-                # Normlaize the resulting stat maps to PAM50 template space
-                for i, contrast_fname in enumerate(stat_maps):
-                    norm_stat_maps=preprocess_Sc.apply_warp(
-                            i_img=[stat_maps[i]], # input clean image
-                            ID=[ID],
-                            o_folder=[os.path.dirname(stat_maps[i])], # output folder
-                            dest_img=os.path.join(path_code, "template", config["PAM50_t2"]), # PAM50 template
-                            warping_field=warp_file,
-                            tag="_inTemplate",
-                            mean=False,
-                            n_jobs=1,
-                            verbose=False,
-                            redo=redo)
-                
-                # Normalize the individual masks to template space
-                norm_mask.append(preprocess_Sc.apply_warp(
-                            i_img=[cord_seg_file], # input clean image
-                            ID=[ID],
-                            o_folder=[os.path.dirname(stat_maps[i])], # output folder
-                            dest_img=os.path.join(path_code, "template", config["PAM50_t2"]), # PAM50 template
-                            warping_field=warp_file,
-                            tag="_inTemplate",
-                            mean=False,
-                            n_jobs=1,
-                            threshold=0.1,
-                            verbose=False,
-                            redo=redo)[0])
-
-        #------ I.4 Derived acquisitions (e.g., smooth3mm): run GLM using source events file
-        for derived_acq_name, acq_info in config.get("derived_acq", {}).items():
-            if "smooth_width" not in acq_info:
-                continue  # skip avg3mm; only process smooth3mm (used for group analysis)
-            source_acq = acq_info["source_acq"]
-            tag = "task-" + task_name + "_acq-" + derived_acq_name
-            tag_source = "task-" + task_name + "_acq-" + source_acq
-
-            # Moco file (pick longest run if multiple exist)
-            moco_candidates = sorted(glob.glob(os.path.join(
-                preprocessing_dir.format(ID), 'func', tag,
-                'sct_fmri_moco', f'sub-{ID}_{tag}*_bold_moco.nii.gz'
-            )))
-            if not moco_candidates:
-                print(f"INFO: No moco file for sub-{ID} {tag}, skipping.", flush=True)
-                continue
-            denoised_fmri = max(moco_candidates, key=lambda f: nib.load(f).shape[3])
-
-            match = re.search(r"_?(run-\d+)", denoised_fmri)
-            run_name = match.group(1) if match else ""
-
-            cord_seg_file = os.path.join(
-                preprocessing_dir.format(ID), 'func', tag,
-                f"sub-{ID}_{tag}_bold_moco_mean_seg.nii.gz"
-            )
             if not os.path.exists(cord_seg_file):
-                print(f"WARNING: No SC mask for sub-{ID} {tag}, skipping.", flush=True)
-                continue
+                raise RuntimeError(f"No mask file found for subject {ID}, task {tag}. Please check the preprocessing outputs and manual corrections.")
 
-            warp_file = os.path.join(
-                preprocessing_dir.format(ID), 'func', tag,
-                f"sub-{ID}_{tag}_from-func_to_PAM50_mode-image_xfm.nii.gz"
-            )
+            # Select warp file
             if not os.path.exists(warp_file):
-                print(f"WARNING: No warp file for sub-{ID} {tag}, skipping.", flush=True)
-                continue
+                raise RuntimeError(f"No warp file found for subject {ID}, task {tag}. Please check the preprocessing outputs and manual corrections.")
 
-            # Events file: reuse the source acquisition's events file
-            events_candidates = glob.glob(os.path.join(
-                config["raw_dir"], f'sub-{ID}', 'func',
-                f'sub-{ID}_{tag_source}_*{run_name}*events.tsv'
-            ))
-            if not events_candidates:
-                print(f"WARNING: No events for sub-{ID} {tag_source} run={run_name}, skipping.", flush=True)
-                continue
-            events_file = events_candidates[0]
+            events_file=glob.glob(os.path.join(config["raw_dir"], f'sub-{ID}', 'func', f'sub-{ID}_{tag_ref}_*events.tsv'))[0]
 
-            # TR from source acquisition's BIDS JSON (derived acq has no sidecar)
-            import json as _json
-            source_json = os.path.join(
-                config["raw_dir"], f'sub-{ID}', 'func',
-                f'sub-{ID}_{tag_source}{("_" + run_name) if run_name else ""}_bold.json'
-            )
-            if not os.path.exists(source_json):
-                # fallback: any JSON for source acq
-                source_json_candidates = glob.glob(os.path.join(
-                    config["raw_dir"], f'sub-{ID}', 'func',
-                    f'sub-{ID}_{tag_source}*_bold.json'
-                ))
-                if not source_json_candidates:
-                    print(f"WARNING: No JSON for sub-{ID} {tag_source}, skipping.", flush=True)
-                    continue
-                source_json = source_json_candidates[0]
-            with open(source_json) as _f:
-                source_tr = _json.load(_f).get("RepetitionTime")
+            # extract TR from json file
+            json_file = glob.glob(os.path.join(config["raw_dir"], f"sub-{ID}", "func", f"sub-{ID}_*{tag_ref}*_bold.json"))[0]
+            with open(json_file, "r") as f:
+                json_data = json.load(f)
+            tr = json_data.get("RepetitionTime")
 
-            stat_maps = glm_ana.run_first_level_glm(
-                ID=ID, i_fname=denoised_fmri, events_file=events_file,
-                mask_file=cord_seg_file, task_name=tag, run_name=run_name,
-                redo=redo, verbose=verbose, tr=source_tr
-            )
+            #------ I.2 Run first level GLM
+            stat_maps=glm_ana.run_first_level_glm(ID=ID,
+                                                        i_fname=denoised_fmri,
+                                                        events_file=events_file,
+                                                        mask_file=cord_seg_file,
+                                                        task_name=tag,
+                                                        smoothing_fwhm=None,
+                                                        tr=tr,
+                                                        redo=redo,
+                                                        verbose=verbose)
 
+            #------ I.2 Apply correction and extract metrics
             for i, contrast_fname in enumerate(stat_maps):
-                corr_type = "fpr"; alpha = 0.01; cluster = 0
-                fname_thr_img = stat_maps[i][:-len(".nii.gz")] + f"_{corr_type}_{str(alpha)[2:]}_{str(cluster)}cluster.nii.gz"
+                # Apply correction
+                corr_type="fpr";alpha=0.01;cluster=0
+                
+                fname_thr_img=stat_maps[i][:-len(".nii.gz")] +f"_{corr_type}_{str(alpha)[2:]}_{str(cluster)}cluster.nii.gz"
+                
                 if not os.path.exists(fname_thr_img) or redo:
-                    thresholded_map, threshold = threshold_stats_img(
-                        stat_maps[i], alpha=alpha,
-                        height_control=corr_type, cluster_threshold=cluster, two_sided=False
-                    )
+                    thresholded_map, threshold = threshold_stats_img(stat_maps[i],
+                                                                    alpha=alpha,
+                                                                    height_control=corr_type,
+                                                                    cluster_threshold=cluster,
+                                                                        two_sided=False)
                     thresholded_map.to_filename(fname_thr_img)
 
+            #------ I.3 Normalization 
+            # Normlaize the resulting stat maps to PAM50 template space
             for i, contrast_fname in enumerate(stat_maps):
-                preprocess_Sc.apply_warp(
-                    i_img=[stat_maps[i]], ID=[ID],
-                    o_folder=[os.path.dirname(stat_maps[i])],
-                    dest_img=os.path.join(path_code, "template", config["PAM50_t2"]),
-                    warping_field=warp_file, tag="_inTemplate",
-                    mean=False, n_jobs=1, verbose=False, redo=redo
-                )
-
+                norm_stat_maps=preprocess_Sc.apply_warp(
+                        i_img=[stat_maps[i]], # input clean image
+                        ID=[ID],
+                        o_folder=[os.path.dirname(stat_maps[i])], # output folder
+                        dest_img=os.path.join(path_code, "template", config["PAM50_t2"]), # PAM50 template
+                        warping_field=warp_file,
+                        tag="_inTemplate",
+                        mean=False,
+                        n_jobs=1,
+                        verbose=False,
+                        redo=redo)
+            
+            # Normalize the individual masks to template space
             norm_mask.append(preprocess_Sc.apply_warp(
-                i_img=[cord_seg_file], ID=[ID],
-                o_folder=[os.path.dirname(stat_maps[i])],
-                dest_img=os.path.join(path_code, "template", config["PAM50_t2"]),
-                warping_field=warp_file, tag="_inTemplate",
-                mean=False, n_jobs=1, threshold=0.1, verbose=False, redo=redo
-            )[0])
+                        i_img=[cord_seg_file], # input clean image
+                        ID=[ID],
+                        o_folder=[os.path.dirname(stat_maps[i])], # output folder
+                        dest_img=os.path.join(path_code, "template", config["PAM50_t2"]), # PAM50 template
+                        warping_field=warp_file,
+                        tag="_inTemplate",
+                        mean=False,
+                        n_jobs=1,
+                        threshold=0.1,
+                        verbose=False,
+                        redo=redo)[0])
 
     print(f'=== First level done for : {ID} ===', flush=True)
     print("=========================================", flush=True)
@@ -287,25 +179,25 @@ for ID_nb, ID in enumerate(IDs):
 #------------------------------------------------------------------
 #------ II. Extract the common mask for all participants and tasks
 #------------------------------------------------------------------
-glm_dir = os.path.join(config["raw_dir"], config["first_level"]["dir"].format("glm",""))
-common_mask_fname = os.path.join(glm_dir.split("sub")[0], "common_mask_PAM50.nii.gz")
+# glm_dir = os.path.join(config["raw_dir"], config["first_level"]["dir"].format("glm",""))
+# common_mask_fname = os.path.join(glm_dir.split("sub")[0], "common_mask_PAM50.nii.gz")
 
-if not os.path.exists(common_mask_fname) or redo:
-    norm_mask_data = [nib.as_closest_canonical(nib.load(f)).get_fdata() for f in norm_mask]
-    n_files = len(norm_mask_data)
+# if not os.path.exists(common_mask_fname) or redo:
+#     norm_mask_data = [nib.as_closest_canonical(nib.load(f)).get_fdata() for f in norm_mask]
+#     n_files = len(norm_mask_data)
 
-    # Compute common mask (n-1)---
-    sum_mask = np.sum(norm_mask_data, axis=0)
-    common_mask_data = (sum_mask >= n_files-3).astype(np.uint8)
-    common_mask_fname = os.path.join(glm_dir.split("sub")[0], "common_mask_PAM50.nii.gz")
-    common_mask_img = nib.Nifti1Image(common_mask_data, affine=nib.load(norm_mask[0]).affine)
-    common_mask_img.to_filename(common_mask_fname)
-    common_mask_data = common_mask_img.get_fdata()
+#     # Compute common mask (n-1)---
+#     sum_mask = np.sum(norm_mask_data, axis=0)
+#     common_mask_data = (sum_mask >= n_files-3).astype(np.uint8)
+#     common_mask_fname = os.path.join(glm_dir.split("sub")[0], "common_mask_PAM50.nii.gz")
+#     common_mask_img = nib.Nifti1Image(common_mask_data, affine=nib.load(norm_mask[0]).affine)
+#     common_mask_img.to_filename(common_mask_fname)
+#     common_mask_data = common_mask_img.get_fdata()
 
-    # ---  Extract the z-slices that contain the common mask ---
-    z_indices = np.where(np.any(common_mask_data > 0, axis=(0,1)))[0]
-    z_min, z_max = z_indices[[0, -1]]
-    z_size = z_max - z_min + 1
+#     # ---  Extract the z-slices that contain the common mask ---
+#     z_indices = np.where(np.any(common_mask_data > 0, axis=(0,1)))[0]
+#     z_min, z_max = z_indices[[0, -1]]
+#     z_size = z_max - z_min + 1
 
 
-# Figure generation moved to figures_workflow.py (run with --figures).
+# # Figure generation moved to figures_workflow.py (run with --figures).

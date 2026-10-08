@@ -190,6 +190,8 @@ try:
             glm_dir = glm_dir_cands[0] if glm_dir_cands else None
             if glm_dir is not None:
                 for acq_name in config["design_exp"]["acq_names"]:
+                    if acq_name == "shimSlice+1mm+sms2":
+                        acq_name = "shimSlice+1mm+sms2+smooth3mm"  # use the smoothed version for second-level GLM
                     tag = "task-motor_acq-" + acq_name
                     nii_cands = glob.glob(os.path.join(glm_dir, tag, f"*_{tag}_t_clustercorrected.nii.gz"))
                     if not nii_cands:
@@ -271,7 +273,7 @@ try:
     # One-sided uncorrected p=0.01 for the actual second-level one-sample t-test
     # (intercept-only design, df = n_subjects - 1). Computed from len(IDs) rather than
     # hardcoded so it stays correct if the cohort size changes.
-    P_UNC = 0.01
+    P_UNC = 0.05
     T_THRESH_UNC = stats.t.ppf(1 - P_UNC, df=len(IDs) - 1)
     # Glob for whichever vox*_perm* directory actually exists, rather than assuming a
     # specific vox threshold (0.05): the primary voxelwise threshold actually computed
@@ -287,11 +289,16 @@ try:
     acq_names_unc = []
     if raw_perm_dir is not None:
         for acq_name in config["design_exp"]["acq_names"]:
+            if acq_name == "shimSlice+1mm+sms2":
+                acq_name = "shimSlice+1mm+sms2+smooth3mm" 
+
             tag_unc = "task-motor_acq-" + acq_name
             nii_cands_unc = glob.glob(os.path.join(raw_perm_dir, tag_unc, f"*_{tag_unc}_t.nii.gz"))
+            
             if nii_cands_unc:
                 i_fnames_unc.append(nii_cands_unc[0])
                 acq_names_unc.append(acq_name)
+   
     if i_fnames_unc:
         titles_unc = [ACQ_DISPLAY_NAMES.get(a, a) for a in acq_names_unc]
         z_slices_unc = [280, 266, 256, 243, 225]
