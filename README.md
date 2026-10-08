@@ -51,6 +51,22 @@ pip install -r "${PATH_CODE}/config/requirements.txt"
 
 Motion correction uses the new moco-dl model ([ivadomed/moco-dl#25](https://github.com/ivadomed/moco-dl/issues/25)), which is not in SCT yet. It runs through `code/moco_dl_v2.py` in its own Python environment, separate from the conda environment above (it needs other versions of numpy and torch):
 
+<details>
+<summary>⚠️ If you are on macOS with an M-series chip but use an intel version of Conda, the following commands will give an error. You can use "uv" to create an ARM environment instead.</summary>
+
+```bash
+git clone -b td/25-inference https://github.com/ivadomed/moco-dl.git
+git clone -b 2td/4dimages https://github.com/ivadomed/sc-crop.git
+cd moco-dl
+uv venv --python 3.11 .venv 
+source .venv/bin/activate
+uv pip install pip
+uv pip install -r requirement.txt -e ../sc-crop
+deactivate
+```
+
+</details>
+
 ```bash
 git clone -b td/25-inference https://github.com/ivadomed/moco-dl.git
 git clone -b 2td/4dimages https://github.com/ivadomed/sc-crop.git
