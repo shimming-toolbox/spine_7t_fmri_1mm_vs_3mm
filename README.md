@@ -302,9 +302,8 @@ bash "${PATH_CODE}/code/run_all_processing.sh" --path-data "${PATH_DATA}" --path
 
 Runs `firstlevel_workflow.py`. For each subject and acquisition:
 
-1. Run a GLM to estimate activation maps (motor task vs rest), using the events files and motion-corrected functional data
+1. Run a GLM to estimate activation maps (motor task and shimSlice only), using the events files and motion-corrected functional data
 2. Threshold and normalize stat maps to PAM50 template space
-3. Generate the EPI comparison figure across shimming conditions
 
 ```bash
 bash "${PATH_CODE}/code/run_all_processing.sh" --path-data "${PATH_DATA}" --path-code "${PATH_CODE}" --tasks motor --firstlevel
