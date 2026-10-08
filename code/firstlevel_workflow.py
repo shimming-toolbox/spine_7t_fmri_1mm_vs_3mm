@@ -41,6 +41,8 @@ path_data = os.path.abspath(args.path_data)
 
 config["raw_dir"]=path_data
 config["code_dir"]=path_code
+config["design_exp"]["task_names"] = ["motor"] # run first level only for motor task
+config["design_exp"]["acq_names"]= ["shimSlice+1mm+sms2","shimSlice+3mm+sms2","shimSlice+1mm+sms2+smooth3mm"] # run first level only for shimSlice+1mm+sms2 and shimSlice+3mm+sms2 acquisitions
 
 participants_tsv = pd.read_csv(os.path.join(path_code, 'config', 'participants.tsv'), sep='\t',dtype={'participant_id': str})
 
@@ -73,8 +75,6 @@ first_level_dir = os.path.join(config["raw_dir"], config["first_level"]["dir"])
 #------------------------------------------------------------------
 #------ III. Run First level
 #------------------------------------------------------------------
-config["design_exp"]["task_names"] = ["motor"] # run first level only for motor task
-config["design_exp"]["acq_names"]= ["shimSlice+1mm+sms2","shimSlice+3mm+sms2","shimSlice+1mm+sms2+smooth3mm"] # run first level only for shimSlice+1mm+sms2 and shimSlice+3mm+sms2 acquisitions
 print("")
 print("=== First level analysis script Start ===", flush=True)
 print("Participant(s) included : ", IDs, flush=True)

@@ -60,6 +60,8 @@ sys.path.append(os.path.join(path_code, "code"))  # Change this line according t
 from denoising import Denoising
 from preprocess import Preprocess_Sc, Preprocess_main
 
+config["design_exp"]["task_names"] = ["motor"]  # Run denoising only for motor task
+config["design_exp"]["acq_names"] =["shimSlice+3mm","shimSlice+1mm+sms2"]  # Run denoising only for these acquisitions
 denoising=Denoising(config,IDs=IDs)
 preprocess_Sc=Preprocess_Sc(config, IDs=IDs)
 preprocess_main=Preprocess_main(config, IDs=IDs)
@@ -78,13 +80,14 @@ print("=== Denoising script Start ===", flush=True)
 print("Participant(s) included : ", IDs, flush=True)
 print("===================================", flush=True)
 print("")
-config["design_exp"]["task_names"] = ["motor"]  # Run denoising only for motor task
-config["design_exp"]["acq_names"] =["shimSlice+3mm","shimSlice+1mm+sms2"]  # Run denoising only for these acquisitions
 
 for ID_nb,ID in enumerate(IDs):
     print("", flush=True)
     print(f'=== Denoising start for :  {ID} ===', flush=True)
 
+    #------------------------------------------------------------------
+    #------ Step 1: Calculate the noise regressors (motion parameters, outliers, CompCor) from the motion-corrected functional data
+    #------------------------------------------------------------------
     for task_name in config["design_exp"]["task_names"]:
         for acq_name in config["design_exp"]["acq_names"]:
             tag = "task-" + task_name + "_acq-" + acq_name
@@ -99,6 +102,7 @@ for ID_nb,ID in enumerate(IDs):
                 else:
                     run_name=""
 
+                #------ check inputs ------------------------------------------------------------------
                 moco_file=glob.glob(os.path.join(preprocessing_dir.format(ID), config["preprocess_dir"]["func_moco"].format(tag), config["preprocess_f"]["func_moco"].format(ID,tag,run_name)))[0]
                 cord_seg_file = glob.glob(os.path.join(preprocessing_dir.format(ID), 'func',tag, config["preprocess_f"]["func_seg"].format(ID,tag,"")))[0]
                 csf_seg_file = glob.glob(os.path.join(preprocessing_dir.format(ID), 'func',tag, config["preprocess_f"]["func_csf"].format(ID,tag,"")))[0]
@@ -109,21 +113,15 @@ for ID_nb,ID in enumerate(IDs):
                 if csf_seg_file is None:
                     raise RuntimeError(f"No mask file found for subject {ID}, task {tag}, run {run_name}. Please check the preprocessing outputs and manual corrections.")
           
-                #------------------------------------------------------------------
-                #------ moco parameters
-                #------------------------------------------------------------------
+                
+                #------ moco parameters ------------------------------------------------------------------
                 moco_param_f=glob.glob(os.path.join(preprocessing_dir.format(ID), config["preprocess_dir"]["func_moco"].format(tag), config["preprocess_f"]["moco_params"].format(tag,run_name)))
                 denoising.moco_params(ID=ID,input_file=moco_param_f, task_name=tag,run_name=run_name,redo=redo)
 
-                #------------------------------------------------------------------
-                #------ outliers parameters
-                #------------------------------------------------------------------
+                #------ outliers parameters ------------------------------------------------------------------
                 denoising.outliers(ID=ID,task_name=tag, mask_file= cord_seg_file,run_name=run_name,redo=redo)
 
-
-                #------------------------------------------------------------------
-                #------ Compute compcor
-                #------------------------------------------------------------------
+                #------ Compute 15 compcor ------------------------------------------------------------------
                 compcor_out, DCT_out = denoising.confounds_ts(
                     ID=ID,
                     task_name=tag,
@@ -137,10 +135,8 @@ for ID_nb,ID in enumerate(IDs):
                     redo=redo
                 )
 
-                #------------------------------------------------------------------
-                #------ Combine all confounds together
-                #------------------------------------------------------------------
-                confound_infos={'outliers':1,'moco':2,'compcor':15} #'outliers':1 #'moco':2,
+                #------ Combine all confounds together ------------------------------------------------------------------
+                confound_infos={'outliers':1,'moco':2,'compcor':15} 
                 confounds=denoising.combine_confounds(
                     ID=ID,
                     task_name=tag,
@@ -167,7 +163,7 @@ for ID_nb,ID in enumerate(IDs):
                     verbose=verbose)
 
                 #------------------------------------------------------------------
-                #------ Apply denoising, HP filtering
+                #------ Step 2: Apply denoising, HP filtering
                 #------------------------------------------------------------------
                 Clean_image_file=denoising.clean_images(
                     ID=ID,
@@ -184,9 +180,9 @@ for ID_nb,ID in enumerate(IDs):
                     redo=redo)
 
                 #------------------------------------------------------------------
-                #------ Apply 3mm slices smoothing 
+                #------ Step 3: Apply 2x slices mm smoothing 
                 #------------------------------------------------------------------
-
+                #------ smooth the 1mm data to 3mm across slices
                 if acq_name == "shimSlice+1mm+sms2":
                     new_acq_tag="shimSlice+1mm+sms2+smooth3mm"
 
@@ -202,9 +198,7 @@ for ID_nb,ID in enumerate(IDs):
                                             redo=redo, 
                                             verbose=verbose)
 
-                #------------------------------------------------------------------
-                #------ Apply smoothing
-                #------------------------------------------------------------------
+                #------ Apply smoothing ------------------------------------------------------------------
                 if acq_name == "shimSlice+1mm+sms2":
                     smooth_imag_files=[Clean_image_file.split(".")[0] + "_s.nii.gz",Clean_image_file_3mmzsmooth.split(".")[0]+ "_s.nii.gz"]
                     clean_imag_files=[Clean_image_file,Clean_image_file_3mmzsmooth]
