@@ -64,8 +64,7 @@ preprocessing_dir = os.path.join(config["raw_dir"], config["preprocess_dir"]["ma
 first_level_dir = os.path.join(config["raw_dir"], config["first_level"]["dir"])
 second_level_dir = os.path.join(config["raw_dir"], config["second_level"]["dir"])
 
-mask = os.path.join(first_level_dir.format('glm',"").split("sub")[0], "common_mask_PAM50.nii.gz")
-
+common_mask_fname = os.path.join(path_code, "template",config["PAM50_cord_2ndlevel"]) #os.path.join(first_level_dir.split("sub")[0], "common_mask_PAM50.nii.gz").format("glm")
 
 def find_tsnr_dir_for_acq(ID, acq_name):
     """
@@ -125,7 +124,7 @@ for acq_name in config["design_exp"]["acq_names"]:
         tsnr_fnames=tsnr_id_fname,
         seg_fnames=cord_seg_file,
         warp_fnames=warp_file,
-        fname_mask=mask)
+        fname_mask=common_mask_fname)
 
     # Boxplot figures moved to figures_workflow.py (run with --figures).
 
@@ -160,7 +159,7 @@ for acq_name in avg_acq_names:
     tsnr_avg3mm[acq_name] = tsnr_ana.generate_average_tsnr_in_pam50(
         IDs=valid_IDs, task_name=task_name, acq_name=acq_name,
         tsnr_fnames=tsnr_id_fname, seg_fnames=cord_seg_file,
-        warp_fnames=warp_file, fname_mask=mask)
+        warp_fnames=warp_file, fname_mask=common_mask_fname)
 
 #------------------------------------------------------------------
 #------ Compute average FD
@@ -210,8 +209,6 @@ print("=== Second level analysis script Start ===", flush=True)
 print("Number of Participant included : ", len(IDs), flush=True)
 print("===================================", flush=True)
 print("")
-
-common_mask_fname = os.path.join(first_level_dir.split("sub")[0], "common_mask_PAM50.nii.gz").format("glm")
 
 import time as _time
 
