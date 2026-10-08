@@ -56,7 +56,6 @@ if tasks != [""]:
 sys.path.append(os.path.join(path_code, "code")) # Change this line according to your directory
 import postprocess, preprocess
 
-glm_ana = postprocess.GLM_main(config,IDs=IDs)
 preprocess_Sc = preprocess.Preprocess_Sc(config,IDs=IDs)
 tsnr_ana = postprocess.TSNR_main(config, IDs,redo)
 
@@ -166,6 +165,10 @@ for acq_name in avg_acq_names:
 #------------------------------------------------------------------
 #------ Compute average FD
 #------------------------------------------------------------------
+config["design_exp"]["task_names"] = ["motor"] # run first level only for motor task
+config["design_exp"]["acq_names"]= ["shimSlice+3mm","shimSlice+1mm+sms2","shimSlice+1mm+sms2+smooth3mm"] # run first level only for shimSlice+1mm+sms2 and shimSlice+3mm+sms2 acquisitions
+glm_ana = postprocess.GLM_main(config,IDs=IDs)
+
 os.makedirs(second_level_dir.format("FD"), exist_ok=True)
 fd_files=[]
 for acq_name in config["design_exp"]["acq_names"]:
@@ -198,6 +201,9 @@ postprocess.pair_ttest(
 #------------------------------------------------------------------
 #------ Run second level analysis
 #------------------------------------------------------------------
+config["design_exp"]["task_names"] = ["motor"] # run first level only for motor task
+config["design_exp"]["acq_names"]= ["shimSlice+3mm","shimSlice+1mm+sms2","shimSlice+1mm+sms2+smooth3mm"] # run first level only for shimSlice+1mm+sms2 and shimSlice+3mm+sms2 acquisitions
+glm_ana = postprocess.GLM_main(config,IDs=IDs)
 
 print("")
 print("=== Second level analysis script Start ===", flush=True)
@@ -221,14 +227,7 @@ for cluster_corr in [0.01,0.001]:
                 tag = "task-" + task_name + "_acq-" + acq_name
                 for ID in IDs:
                     tag = "task-" + task_name + "_acq-" + acq_name
-                    raw_func = sorted(glob.glob(os.path.join(config["raw_dir"], f'sub-{ID}', 'func', f'sub-{ID}_{tag}_*bold.nii.gz')))
-                    if not raw_func:
-                        continue
-                    match = re.search(r"_?(run-\d+)", raw_func[0])
-                    run_name = match.group(1) if match else ""
-                    if acq_name == "shimSlice+1mm+sms2":
-                        tag = "task-" + task_name + "_acq-" + "shimSlice+1mm+sms2+smooth3mm"  # use the smoothed version for second-level GLM  
-                    glm_matches = glob.glob(os.path.join(first_level_dir.format('glm',ID), f"{tag}", f"*{tag}*{run_name}*trial_RH-rest*inTemplate.nii.gz"))
+                    glm_matches = glob.glob(os.path.join(first_level_dir.format('glm',ID), f"{tag}", f"*{tag}*trial_RH-rest*inTemplate.nii.gz"))
                     
                     if glm_matches:
                         i_fnames.append(glm_matches[0])
