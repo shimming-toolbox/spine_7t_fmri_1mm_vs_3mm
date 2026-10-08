@@ -92,6 +92,7 @@ for ID_nb, ID in enumerate(IDs):
     for task_name in config["design_exp"]["task_names"]:
         for acq_name in config["design_exp"]["acq_names"]:
             tag="task-" + task_name + "_acq-" + acq_name
+            tag_ref="task-" + task_name + "_acq-" + acq_name.replace("+smooth3mm","") if acq_name=="shimSlice+1mm+sms2+smooth3mm" else tag
             denoised_candidates = glob.glob(os.path.join(denoising_dir.format(ID), tag, config["denoising"]["denoised_dir"],"*_nostd_s.nii.gz"))
             if denoised_candidates:
                 denoised_fmri = denoised_candidates[0]
@@ -108,7 +109,13 @@ for ID_nb, ID in enumerate(IDs):
             if not os.path.exists(warp_file):
                 raise RuntimeError(f"No warp file found for subject {ID}, task {tag}. Please check the preprocessing outputs and manual corrections.")
 
-            events_file=glob.glob(os.path.join(config["raw_dir"], f'sub-{ID}', 'func', f'sub-{ID}_{tag}_*events.tsv'))[0]
+            events_file=glob.glob(os.path.join(config["raw_dir"], f'sub-{ID}', 'func', f'sub-{ID}_{tag_ref}_*events.tsv'))[0]
+
+            # extract TR from json file
+            json_file = glob.glob(os.path.join(config["raw_dir"], f"sub-{ID}", "func", f"sub-{ID}_*{tag_ref}*_bold.json"))[0]
+            with open(json_file, "r") as f:
+                json_data = json.load(f)
+            tr = json_data.get("RepetitionTime")
 
             #------ I.2 Run first level GLM
             stat_maps=glm_ana.run_first_level_glm(ID=ID,
@@ -116,8 +123,8 @@ for ID_nb, ID in enumerate(IDs):
                                                         events_file=events_file,
                                                         mask_file=cord_seg_file,
                                                         task_name=tag,
-                                                        run_name="",
                                                         smoothing_fwhm=None,
+                                                        tr=tr,
                                                         redo=redo,
                                                         verbose=verbose)
 
