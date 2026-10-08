@@ -182,25 +182,25 @@ for ID_nb, ID in enumerate(IDs):
 #------------------------------------------------------------------
 #------ II. Extract the common mask for all participants and tasks
 #------------------------------------------------------------------
-glm_dir = os.path.join(config["raw_dir"], config["first_level"]["dir"].format("glm",""))
-common_mask_fname = os.path.join(glm_dir.split("sub")[0], "common_mask_PAM50.nii.gz")
+# glm_dir = os.path.join(config["raw_dir"], config["first_level"]["dir"].format("glm",""))
+# common_mask_fname = os.path.join(glm_dir.split("sub")[0], "common_mask_PAM50.nii.gz")
 
-if not os.path.exists(common_mask_fname) or redo:
-    norm_mask_data = [nib.as_closest_canonical(nib.load(f)).get_fdata() for f in norm_mask]
-    n_files = len(norm_mask_data)
+# if not os.path.exists(common_mask_fname) or redo:
+#     norm_mask_data = [nib.as_closest_canonical(nib.load(f)).get_fdata() for f in norm_mask]
+#     n_files = len(norm_mask_data)
 
-    # Compute common mask (n-1)---
-    sum_mask = np.sum(norm_mask_data, axis=0)
-    common_mask_data = (sum_mask >= n_files-3).astype(np.uint8)
-    common_mask_fname = os.path.join(glm_dir.split("sub")[0], "common_mask_PAM50.nii.gz")
-    common_mask_img = nib.Nifti1Image(common_mask_data, affine=nib.load(norm_mask[0]).affine)
-    common_mask_img.to_filename(common_mask_fname)
-    common_mask_data = common_mask_img.get_fdata()
+#     # Compute common mask (n-1)---
+#     sum_mask = np.sum(norm_mask_data, axis=0)
+#     common_mask_data = (sum_mask >= n_files-3).astype(np.uint8)
+#     common_mask_fname = os.path.join(glm_dir.split("sub")[0], "common_mask_PAM50.nii.gz")
+#     common_mask_img = nib.Nifti1Image(common_mask_data, affine=nib.load(norm_mask[0]).affine)
+#     common_mask_img.to_filename(common_mask_fname)
+#     common_mask_data = common_mask_img.get_fdata()
 
-    # ---  Extract the z-slices that contain the common mask ---
-    z_indices = np.where(np.any(common_mask_data > 0, axis=(0,1)))[0]
-    z_min, z_max = z_indices[[0, -1]]
-    z_size = z_max - z_min + 1
+#     # ---  Extract the z-slices that contain the common mask ---
+#     z_indices = np.where(np.any(common_mask_data > 0, axis=(0,1)))[0]
+#     z_min, z_max = z_indices[[0, -1]]
+#     z_size = z_max - z_min + 1
 
 
-# Figure generation moved to figures_workflow.py (run with --figures).
+# # Figure generation moved to figures_workflow.py (run with --figures).
