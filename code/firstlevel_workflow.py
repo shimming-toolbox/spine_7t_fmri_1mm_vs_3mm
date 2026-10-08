@@ -92,88 +92,78 @@ for ID_nb, ID in enumerate(IDs):
     for task_name in config["design_exp"]["task_names"]:
         for acq_name in config["design_exp"]["acq_names"]:
             tag="task-" + task_name + "_acq-" + acq_name
-            raw_func=glob.glob(os.path.join(config["raw_dir"], f'sub-{ID}', 'func', f'sub-{ID}_{tag}_*bold.nii.gz'))
-            for func_file in raw_func:
-                # Check run number if multiple run exists
-                match = re.search(r"_?(run-\d+)", func_file)
-                if match:
-                    run_name=match.group(1)
-                    print(run_name)
-                else:
-                    run_name=""
+            denoised_candidates = glob.glob(os.path.join(denoising_dir.format(ID), tag, config["denoising"]["denoised_dir"],"*_nostd_s.nii.gz"))
+            if denoised_candidates:
+                denoised_fmri = denoised_candidates[0]
+            else:
+                raise RuntimeError(f"No denoised file found for sub-{ID} {tag}. Please check the denoising outputs")
 
-                denoised_candidates = glob.glob(os.path.join(denoising_dir.format(ID), tag, config["denoising"]["denoised_dir"],"*"+run_name+"*_nostd_s.nii.gz"))
-                if denoised_candidates:
-                    denoised_fmri = denoised_candidates[0]
-                else:
-                    raise RuntimeError(f"No denoised file found for sub-{ID} {tag}. Please check the denoising outputs")
+            cord_seg_file = glob.glob(os.path.join(preprocessing_dir.format(ID), 'func',tag, config["preprocess_f"]["func_seg"].format(ID,tag,"")))[0]
+            warp_file = os.path.join(preprocessing_dir.format(ID), 'func', tag, f"sub-{ID}_{tag}_from-func_to_PAM50_mode-image_xfm.nii.gz")
 
-                cord_seg_file = glob.glob(os.path.join(preprocessing_dir.format(ID), 'func',tag, config["preprocess_f"]["func_seg"].format(ID,tag,"")))[0]
-                warp_file = os.path.join(preprocessing_dir.format(ID), 'func', tag, f"sub-{ID}_{tag}_from-func_to_PAM50_mode-image_xfm.nii.gz")
+            if not os.path.exists(cord_seg_file):
+                raise RuntimeError(f"No mask file found for subject {ID}, task {tag}. Please check the preprocessing outputs and manual corrections.")
 
-                if not os.path.exists(cord_seg_file):
-                    raise RuntimeError(f"No mask file found for subject {ID}, task {tag}. Please check the preprocessing outputs and manual corrections.")
+            # Select warp file
+            if not os.path.exists(warp_file):
+                raise RuntimeError(f"No warp file found for subject {ID}, task {tag}. Please check the preprocessing outputs and manual corrections.")
 
-                # Select warp file
-                if not os.path.exists(warp_file):
-                    raise RuntimeError(f"No warp file found for subject {ID}, task {tag}. Please check the preprocessing outputs and manual corrections.")
+            events_file=glob.glob(os.path.join(config["raw_dir"], f'sub-{ID}', 'func', f'sub-{ID}_{tag}_*{run_name}*events.tsv'))[0]
 
-                events_file=glob.glob(os.path.join(config["raw_dir"], f'sub-{ID}', 'func', f'sub-{ID}_{tag}_*{run_name}*events.tsv'))[0]
+            #------ I.2 Run first level GLM
+            stat_maps=glm_ana.run_first_level_glm(ID=ID,
+                                                        i_fname=denoised_fmri,
+                                                        events_file=events_file,
+                                                        mask_file=cord_seg_file,
+                                                        task_name=tag,
+                                                        run_name=run_name,
+                                                        smoothing_fwhm=None,
+                                                        redo=redo,
+                                                        verbose=verbose)
 
-                #------ I.2 Run first level GLM
-                stat_maps=glm_ana.run_first_level_glm(ID=ID,
-                                                          i_fname=denoised_fmri,
-                                                          events_file=events_file,
-                                                          mask_file=cord_seg_file,
-                                                          task_name=tag,
-                                                          run_name=run_name,
-                                                          smoothing_fwhm=None,
-                                                          redo=redo,
-                                                          verbose=verbose)
-
-                #------ I.2 Apply correction and extract metrics
-                for i, contrast_fname in enumerate(stat_maps):
-                    # Apply correction
-                    corr_type="fpr";alpha=0.01;cluster=0
-                    
-                    fname_thr_img=stat_maps[i][:-len(".nii.gz")] +f"_{corr_type}_{str(alpha)[2:]}_{str(cluster)}cluster.nii.gz"
-                    
-                    if not os.path.exists(fname_thr_img) or redo:
-                        thresholded_map, threshold = threshold_stats_img(stat_maps[i],
-                                                                        alpha=alpha,
-                                                                        height_control=corr_type,
-                                                                        cluster_threshold=cluster,
-                                                                            two_sided=False)
-                        thresholded_map.to_filename(fname_thr_img)
-   
-                #------ I.3 Normalization 
-                # Normlaize the resulting stat maps to PAM50 template space
-                for i, contrast_fname in enumerate(stat_maps):
-                    norm_stat_maps=preprocess_Sc.apply_warp(
-                            i_img=[stat_maps[i]], # input clean image
-                            ID=[ID],
-                            o_folder=[os.path.dirname(stat_maps[i])], # output folder
-                            dest_img=os.path.join(path_code, "template", config["PAM50_t2"]), # PAM50 template
-                            warping_field=warp_file,
-                            tag="_inTemplate",
-                            mean=False,
-                            n_jobs=1,
-                            verbose=False,
-                            redo=redo)
+            #------ I.2 Apply correction and extract metrics
+            for i, contrast_fname in enumerate(stat_maps):
+                # Apply correction
+                corr_type="fpr";alpha=0.01;cluster=0
                 
-                # Normalize the individual masks to template space
-                norm_mask.append(preprocess_Sc.apply_warp(
-                            i_img=[cord_seg_file], # input clean image
-                            ID=[ID],
-                            o_folder=[os.path.dirname(stat_maps[i])], # output folder
-                            dest_img=os.path.join(path_code, "template", config["PAM50_t2"]), # PAM50 template
-                            warping_field=warp_file,
-                            tag="_inTemplate",
-                            mean=False,
-                            n_jobs=1,
-                            threshold=0.1,
-                            verbose=False,
-                            redo=redo)[0])
+                fname_thr_img=stat_maps[i][:-len(".nii.gz")] +f"_{corr_type}_{str(alpha)[2:]}_{str(cluster)}cluster.nii.gz"
+                
+                if not os.path.exists(fname_thr_img) or redo:
+                    thresholded_map, threshold = threshold_stats_img(stat_maps[i],
+                                                                    alpha=alpha,
+                                                                    height_control=corr_type,
+                                                                    cluster_threshold=cluster,
+                                                                        two_sided=False)
+                    thresholded_map.to_filename(fname_thr_img)
+
+            #------ I.3 Normalization 
+            # Normlaize the resulting stat maps to PAM50 template space
+            for i, contrast_fname in enumerate(stat_maps):
+                norm_stat_maps=preprocess_Sc.apply_warp(
+                        i_img=[stat_maps[i]], # input clean image
+                        ID=[ID],
+                        o_folder=[os.path.dirname(stat_maps[i])], # output folder
+                        dest_img=os.path.join(path_code, "template", config["PAM50_t2"]), # PAM50 template
+                        warping_field=warp_file,
+                        tag="_inTemplate",
+                        mean=False,
+                        n_jobs=1,
+                        verbose=False,
+                        redo=redo)
+            
+            # Normalize the individual masks to template space
+            norm_mask.append(preprocess_Sc.apply_warp(
+                        i_img=[cord_seg_file], # input clean image
+                        ID=[ID],
+                        o_folder=[os.path.dirname(stat_maps[i])], # output folder
+                        dest_img=os.path.join(path_code, "template", config["PAM50_t2"]), # PAM50 template
+                        warping_field=warp_file,
+                        tag="_inTemplate",
+                        mean=False,
+                        n_jobs=1,
+                        threshold=0.1,
+                        verbose=False,
+                        redo=redo)[0])
 
     print(f'=== First level done for : {ID} ===', flush=True)
     print("=========================================", flush=True)
