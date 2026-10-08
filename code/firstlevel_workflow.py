@@ -106,7 +106,7 @@ for ID_nb, ID in enumerate(IDs):
                 if denoised_candidates:
                     denoised_fmri = denoised_candidates[0]
                 else:
-                    raise RuntimeError(f"No denoised file found for sub-{ID} {tag}", flush=True)
+                    raise RuntimeError(f"No denoised file found for sub-{ID} {tag}. Please check the denoising outputs")
 
                 cord_seg_file = glob.glob(os.path.join(preprocessing_dir.format(ID), 'func',tag, config["preprocess_f"]["func_seg"].format(ID,tag,"")))[0]
                 warp_file = os.path.join(preprocessing_dir.format(ID), 'func', tag, f"sub-{ID}_{tag}_from-func_to_PAM50_mode-image_xfm.nii.gz")
