@@ -42,7 +42,7 @@ path_data = os.path.abspath(args.path_data)
 config["raw_dir"]=path_data
 config["code_dir"]=path_code
 config["design_exp"]["task_names"] = ["motor"] # run first level only for motor task
-config["design_exp"]["acq_names"]= ["shimSlice+1mm+sms2","shimSlice+3mm+sms2","shimSlice+1mm+sms2+smooth3mm"] # run first level only for shimSlice+1mm+sms2 and shimSlice+3mm+sms2 acquisitions
+config["design_exp"]["acq_names"]= ["shimSlice+3mm","shimSlice+1mm+sms2","shimSlice+1mm+sms2+smooth3mm"] # run first level only for shimSlice+1mm+sms2 and shimSlice+3mm+sms2 acquisitions
 
 participants_tsv = pd.read_csv(os.path.join(path_code, 'config', 'participants.tsv'), sep='\t',dtype={'participant_id': str})
 
@@ -93,7 +93,6 @@ for ID_nb, ID in enumerate(IDs):
         for acq_name in config["design_exp"]["acq_names"]:
             tag="task-" + task_name + "_acq-" + acq_name
             denoised_candidates = glob.glob(os.path.join(denoising_dir.format(ID), tag, config["denoising"]["denoised_dir"],"*_nostd_s.nii.gz"))
-            print(denoised_candidates)
             if denoised_candidates:
                 denoised_fmri = denoised_candidates[0]
             else:
