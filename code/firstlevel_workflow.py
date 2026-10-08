@@ -93,6 +93,7 @@ for ID_nb, ID in enumerate(IDs):
         for acq_name in config["design_exp"]["acq_names"]:
             tag="task-" + task_name + "_acq-" + acq_name
             denoised_candidates = glob.glob(os.path.join(denoising_dir.format(ID), tag, config["denoising"]["denoised_dir"],"*_nostd_s.nii.gz"))
+            print(denoised_candidates)
             if denoised_candidates:
                 denoised_fmri = denoised_candidates[0]
             else:
@@ -108,7 +109,7 @@ for ID_nb, ID in enumerate(IDs):
             if not os.path.exists(warp_file):
                 raise RuntimeError(f"No warp file found for subject {ID}, task {tag}. Please check the preprocessing outputs and manual corrections.")
 
-            events_file=glob.glob(os.path.join(config["raw_dir"], f'sub-{ID}', 'func', f'sub-{ID}_{tag}_*{run_name}*events.tsv'))[0]
+            events_file=glob.glob(os.path.join(config["raw_dir"], f'sub-{ID}', 'func', f'sub-{ID}_{tag}_*events.tsv'))[0]
 
             #------ I.2 Run first level GLM
             stat_maps=glm_ana.run_first_level_glm(ID=ID,
@@ -116,7 +117,7 @@ for ID_nb, ID in enumerate(IDs):
                                                         events_file=events_file,
                                                         mask_file=cord_seg_file,
                                                         task_name=tag,
-                                                        run_name=run_name,
+                                                        run_name="",
                                                         smoothing_fwhm=None,
                                                         redo=redo,
                                                         verbose=verbose)
