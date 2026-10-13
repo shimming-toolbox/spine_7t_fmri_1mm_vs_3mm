@@ -93,7 +93,7 @@ for ID_nb, ID in enumerate(IDs):
         for acq_name in config["design_exp"]["acq_names"]:
             tag="task-" + task_name + "_acq-" + acq_name
             tag_ref="task-" + task_name + "_acq-" + acq_name.replace("+smooth3mm","") if acq_name=="shimSlice+1mm+sms2+smooth3mm" else tag
-            denoised_candidates = glob.glob(os.path.join(denoising_dir.format(ID), tag, config["denoising"]["denoised_dir"],"*_nostd_s.nii.gz"))
+            denoised_candidates = glob.glob(os.path.join(denoising_dir.format(ID), tag, config["denoising"]["denoised_dir"],"*_nostd.nii.gz"))
             if denoised_candidates:
                 denoised_fmri = denoised_candidates[0]
             else:
@@ -157,6 +157,18 @@ for ID_nb, ID in enumerate(IDs):
                         n_jobs=1,
                         verbose=False,
                         redo=redo)
+                
+                #------ Apply smoothing ------------------------------------------------------------------
+                smooth_imag_file=norm_stat_maps[0].split(".")[0] + "_s.nii.gz"
+                if acq_name == "shimSlice+1mm+sms2" or acq_name == "shimSlice+1mm+sms2+smooth3mm":
+                    fwhm=[1.5,1.5,2]
+                else:
+                    fwhm=[1.5,1.5,6]
+                
+                if not os.path.exists("smooth_imag_file"):
+                    smoothed_image=image.smooth_img(norm_stat_maps[0], fwhm)
+                    smoothed_image.to_filename(smooth_imag_file)
+                
             
             # Normalize the individual masks to template space
             norm_mask.append(preprocess_Sc.apply_warp(
