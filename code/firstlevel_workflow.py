@@ -118,14 +118,14 @@ for ID_nb, ID in enumerate(IDs):
             tr = json_data.get("RepetitionTime")
 
             #------ I.2 Run first level GLM
-            stat_maps=glm_ana.run_first_level_glm(ID=ID,
+            stat_maps, beta_maps = glm_ana.run_first_level_glm(ID=ID,
                                                         i_fname=denoised_fmri,
                                                         events_file=events_file,
                                                         mask_file=cord_seg_file,
                                                         task_name=tag,
                                                         smoothing_fwhm=None,
                                                         tr=tr,
-                                                        redo=redo,
+                                                        redo=True,
                                                         verbose=verbose)
 
             #------ I.2 Apply correction and extract metrics
@@ -146,7 +146,19 @@ for ID_nb, ID in enumerate(IDs):
             #------ I.3 Normalization 
             # Normlaize the resulting stat maps to PAM50 template space
             for i, contrast_fname in enumerate(stat_maps):
-                norm_stat_maps=preprocess_Sc.apply_warp(
+                norm_beta_maps=preprocess_Sc.apply_warp(
+                        i_img=[beta_maps[i]], # input clean image
+                        ID=[ID],
+                        o_folder=[os.path.dirname(stat_maps[i])], # output folder
+                        dest_img=os.path.join(path_code, "template", config["PAM50_t2"]), # PAM50 template
+                        warping_field=warp_file,
+                        tag="_inTemplate",
+                        mean=False,
+                        n_jobs=1,
+                        verbose=False,
+                        redo=True)
+
+                norm_t_maps=preprocess_Sc.apply_warp(
                         i_img=[stat_maps[i]], # input clean image
                         ID=[ID],
                         o_folder=[os.path.dirname(stat_maps[i])], # output folder
@@ -159,17 +171,18 @@ for ID_nb, ID in enumerate(IDs):
                         redo=redo)
                 
                 #------ Apply smoothing ------------------------------------------------------------------
-                smooth_imag_file=norm_stat_maps[0].split(".")[0] + "_s.nii.gz"
-                if acq_name == "shimSlice+1mm+sms2" or acq_name == "shimSlice+1mm+sms2+smooth3mm":
-                    fwhm=[1.5,1.5,2]
-                else:
-                    fwhm=[1.5,1.5,6]
+                smooth_beta_imag_file=norm_beta_maps[0].split(".")[0] + "_s.nii.gz" # use for second level analysis
+                smooth_t_imag_file=norm_t_maps[0].split(".")[0] + "_s.nii.gz" # use for individual map plotting
+                fwhm=[1.5,1.5,4]
                 
-                if not os.path.exists("smooth_imag_file"):
-                    smoothed_image=image.smooth_img(norm_stat_maps[0], fwhm)
-                    smoothed_image.to_filename(smooth_imag_file)
-                
-            
+                if not os.path.exists(smooth_beta_imag_file):
+                    smoothed_image=image.smooth_img(norm_beta_maps[0], fwhm)
+                    smoothed_image.to_filename(smooth_beta_imag_file)
+
+                if not os.path.exists(smooth_t_imag_file):
+                    smoothed_image=image.smooth_img(norm_t_maps[0], fwhm)
+                    smoothed_image.to_filename(smooth_t_imag_file)
+                            
             # Normalize the individual masks to template space
             norm_mask.append(preprocess_Sc.apply_warp(
                         i_img=[cord_seg_file], # input clean image
