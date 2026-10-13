@@ -174,7 +174,7 @@ class GLM_main:
                 tag="_s"
             else:
                 tag=""
-            stat_maps.append(os.path.join(first_level_dir, f"sub-{ID}_{task_name}{run_tag}_{contrast}{tag}_t.nii.gz"))
+            stat_maps.append(os.path.join(first_level_dir, f"sub-{ID}_{task_name}{run_tag}_{contrast}{tag}_z.nii.gz"))
             beta_maps.append(os.path.join(first_level_dir, f"sub-{ID}_{task_name}{run_tag}_{contrast}{tag}_beta.nii.gz"))
             
             if not os.path.exists(stat_maps[i]) or redo:
