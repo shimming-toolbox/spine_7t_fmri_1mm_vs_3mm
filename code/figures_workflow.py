@@ -331,45 +331,7 @@ except Exception as e:
     print(f"WARNING: GLM uncorrected group maps failed: {e}", flush=True)
 
 # ------------------------------------------------------------------
-# 6. ICC maps
-# ------------------------------------------------------------------
-print("", flush=True)
-print("=== ICC maps ===", flush=True)
-icc_base_dir = second_level_dir.format("icc")
-z_slices_icc = [324, 306, 268, 238, 222, 204]
-for icc_label, subdir in [
-    ("run-01_vs_run-02",    "shimSlice_run01_vs_run02"),
-    ("shimBase_vs_shimSlice", "shimBase_vs_shimSlice"),
-]:
-    icc_nii = os.path.join(icc_base_dir, subdir, "group_voxelwise_ICC.nii.gz")
-    if not os.path.exists(icc_nii):
-        print(f"INFO: No ICC map at {icc_nii}, skipping.", flush=True)
-        continue
-    try:
-        icc_plot = figures.plot_fmri_maps(
-            i_fnames=[icc_nii],
-            output_fname=os.path.join(output_fig, f"n{len(IDs)}_icc_{icc_label}.png"),
-            titles=[""], cmap="rainbow", cbar_label='ICC',
-            stat_min=0.3, stat_max=0.9,
-            background_fname=os.path.join(path_code, "template", config["PAM50_t2"]),
-            redo=redo)
-        icc_axial_plot = figures.plot_fmri_maps_axial(
-            i_fnames=[icc_nii],
-            output_fname=os.path.join(output_fig, f"n{len(IDs)}_icc_{icc_label}_axial.png"),
-            cmap="rainbow", stat_min=0.3, stat_max=0.9, titles=[""],
-            background_fname=os.path.join(path_code, "template", config["PAM50_t2"]),
-            underlay_fname=os.path.join(path_code, "template", config["PAM50_gm"]),
-            z_slices=z_slices_icc, n_slices=len(z_slices_icc), redo=redo)
-        figures.combine_plots(
-            output_fname=os.path.join(output_fig, f"n{len(IDs)}_combined_icc_{icc_label}_plots.png"),
-            map_files=[icc_plot], label_idx=False, axial_files=[icc_axial_plot],
-            figsize=(2, 4), redo=redo)
-    except Exception as e:
-        print(f"WARNING: ICC {icc_label} figure failed: {e}", flush=True)
-
-
-# ------------------------------------------------------------------
-# 7. metrics extraction + comparison figures
+# 6. metrics extraction + comparison figures
 # ------------------------------------------------------------------
 print("", flush=True)
 print("=== metrics extraction + comparison figures ===", flush=True)
