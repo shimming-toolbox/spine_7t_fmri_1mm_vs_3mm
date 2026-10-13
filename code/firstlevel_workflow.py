@@ -182,20 +182,6 @@ for ID_nb, ID in enumerate(IDs):
                 if not os.path.exists(smooth_t_imag_file):
                     smoothed_image=image.smooth_img(norm_t_maps[0], fwhm)
                     smoothed_image.to_filename(smooth_t_imag_file)
-                            
-            # Normalize the individual masks to template space
-            norm_mask.append(preprocess_Sc.apply_warp(
-                        i_img=[cord_seg_file], # input clean image
-                        ID=[ID],
-                        o_folder=[os.path.dirname(stat_maps[i])], # output folder
-                        dest_img=os.path.join(path_code, "template", config["PAM50_t2"]), # PAM50 template
-                        warping_field=warp_file,
-                        tag="_inTemplate",
-                        mean=False,
-                        n_jobs=1,
-                        threshold=0.1,
-                        verbose=False,
-                        redo=redo)[0])
 
     print(f'=== First level done for : {ID} ===', flush=True)
     print("=========================================", flush=True)
