@@ -224,7 +224,7 @@ for cluster_corr in [0.01,0.001]:
                 tag = "task-" + task_name + "_acq-" + acq_name
                 for ID in IDs:
                     tag = "task-" + task_name + "_acq-" + acq_name
-                    glm_matches = glob.glob(os.path.join(first_level_dir.format('glm',ID), f"{tag}", f"*{tag}*trial_RH-rest*inTemplate.nii.gz"))
+                    glm_matches = glob.glob(os.path.join(first_level_dir.format('glm',ID), f"{tag}", f"*{tag}*trial_RH-rest*_beta_inTemplate_s.nii.gz"))
                     
                     if glm_matches:
                         i_fnames.append(glm_matches[0])
