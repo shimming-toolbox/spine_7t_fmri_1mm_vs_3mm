@@ -158,7 +158,7 @@ for ID_nb, ID in enumerate(IDs):
                         verbose=False,
                         redo=True)
 
-                norm_t_maps=preprocess_Sc.apply_warp(
+                norm_z_maps=preprocess_Sc.apply_warp(
                         i_img=[stat_maps[i]], # input clean image
                         ID=[ID],
                         o_folder=[os.path.dirname(stat_maps[i])], # output folder
@@ -172,16 +172,16 @@ for ID_nb, ID in enumerate(IDs):
                 
                 #------ Apply smoothing ------------------------------------------------------------------
                 smooth_beta_imag_file=norm_beta_maps[0].split(".")[0] + "_s.nii.gz" # use for second level analysis
-                smooth_t_imag_file=norm_t_maps[0].split(".")[0] + "_s.nii.gz" # use for individual map plotting
+                smooth_z_imag_file=norm_z_maps[0].split(".")[0] + "_s.nii.gz" # use for individual map plotting
                 fwhm=[1.5,1.5,4]
                 
                 if not os.path.exists(smooth_beta_imag_file):
                     smoothed_image=image.smooth_img(norm_beta_maps[0], fwhm)
                     smoothed_image.to_filename(smooth_beta_imag_file)
 
-                if not os.path.exists(smooth_t_imag_file):
-                    smoothed_image=image.smooth_img(norm_t_maps[0], fwhm)
-                    smoothed_image.to_filename(smooth_t_imag_file)
+                if not os.path.exists(smooth_z_imag_file):
+                    smoothed_image=image.smooth_img(norm_z_maps[0], fwhm)
+                    smoothed_image.to_filename(smooth_z_imag_file)
 
     print(f'=== First level done for : {ID} ===', flush=True)
     print("=========================================", flush=True)
