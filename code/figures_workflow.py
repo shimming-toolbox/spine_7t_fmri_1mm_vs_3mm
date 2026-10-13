@@ -170,11 +170,11 @@ print("", flush=True)
 print("=== GLM group maps ===", flush=True)
 try:
     glm_plot = {}; glm_axial_plot = {}; bar_plot = {}; dist_plot = {}
-    for cluster_corr in [0.01, 0.001]:
+    for cluster_corr in [0.01]:
         glm_plot[cluster_corr] = {}; glm_axial_plot[cluster_corr] = {}
         bar_plot[cluster_corr] = {}; dist_plot[cluster_corr] = {}
-        z_slices = [280, 266, 256, 243, 225]
-        for vox_thr in [0.005]:
+        z_slices = [285, 265, 256, 235, 192]
+        for vox_thr in [0.05]:
             i_fnames_glm = []
             acq_names_glm = []
             metrics_csvs = []
@@ -214,7 +214,7 @@ try:
             glm_plot[cluster_corr][vox_thr] = figures.plot_fmri_maps(
                 i_fnames=i_fnames_glm,
                 output_fname=os.path.join(output_fig, f"n{len(IDs)}_glm_{cluster_corr}_vox{vox_thr}_avg_map.png"),
-                stat_min=3, stat_max=6, cbar_label='t-value',
+                stat_min=0, stat_max=6, cbar_label='t-value',
                 titles=titles_glm,
                 background_fname=os.path.join(path_code, "template", config["PAM50_t2"]),
                 underlay_fname=os.path.join(path_code, "template", config["PAM50_gm"]), redo=redo)
@@ -273,7 +273,7 @@ try:
     # One-sided uncorrected p=0.01 for the actual second-level one-sample t-test
     # (intercept-only design, df = n_subjects - 1). Computed from len(IDs) rather than
     # hardcoded so it stays correct if the cohort size changes.
-    P_UNC = 0.05
+    P_UNC = 0.01
     T_THRESH_UNC = stats.t.ppf(1 - P_UNC, df=len(IDs) - 1)
     # Glob for whichever vox*_perm* directory actually exists, rather than assuming a
     # specific vox threshold (0.05): the primary voxelwise threshold actually computed
