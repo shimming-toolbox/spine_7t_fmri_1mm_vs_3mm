@@ -169,102 +169,99 @@ ACQ_DISPLAY_NAMES = {
 # ------------------------------------------------------------------
 print("", flush=True)
 print("=== GLM group maps ===", flush=True)
-try:
-    glm_plot = {}; glm_axial_plot = {}; bar_plot = {}; dist_plot = {}
-    for cluster_corr in [0.01,0.05]:
-        glm_plot[cluster_corr] = {}; glm_axial_plot[cluster_corr] = {}
-        bar_plot[cluster_corr] = {}; dist_plot[cluster_corr] = {}
-        z_slices = [314, 263, 256, 236, 128]
-        for vox_thr in [0.05]:
-            i_fnames_glm = []
-            acq_names_glm = []
-            metrics_csvs = []
-            values_csvs  = []
-            # Glob for whichever perm* directory was actually computed (e.g. perm1000 or
-            # perm10000) rather than hardcoding the permutation count: a mismatch here
-            # silently emptied i_fnames_glm below (caught by "if not i_fnames_glm: ...
-            # skipping"), which is why this map went missing without any visible error.
-            glm_dir_cands = glob.glob(os.path.join(
-                second_level_dir.format("glm"),
-                f"cluster_p{cluster_corr}_vox{vox_thr}_perm*"
-            ))
-            glm_dir = glm_dir_cands[0] if glm_dir_cands else None
-            if glm_dir is not None:
-                for acq_name in config["design_exp"]["acq_names"]:
-                    if acq_name == "shimSlice+1mm+sms2":
-                        acq_name = "shimSlice+1mm+sms2+smooth3mm"  # use the smoothed version for second-level GLM
-                    tag = "task-motor_acq-" + acq_name
-                    nii_cands = glob.glob(os.path.join(glm_dir, tag, f"*_{tag}_t_clustercorrected.nii.gz"))
-                    if not nii_cands:
-                        continue
-                    nii_path = nii_cands[0]
-                    i_fnames_glm.append(nii_path)
-                    acq_names_glm.append(acq_name)
-                    base = nii_path.split(".nii.gz")[0]
-                    if os.path.exists(base + "_metrics.csv"):
-                        metrics_csvs.append(base + "_metrics.csv")
-                    if os.path.exists(base + "_values.csv"):
-                        values_csvs.append(base + "_values.csv")
+# try:
+glm_plot = {}; glm_axial_plot = {}; bar_plot = {}; dist_plot = {}
+for cluster_corr in [0.01,0.05]:
+    glm_plot[cluster_corr] = {}; glm_axial_plot[cluster_corr] = {}
+    bar_plot[cluster_corr] = {}; dist_plot[cluster_corr] = {}
+    z_slices = [314, 263, 256, 236, 128]
+    for vox_thr in [0.05]:
+        i_fnames_glm = []
+        acq_names_glm = []
+        metrics_csvs = []
+        values_csvs  = []
+        # Glob for whichever perm* directory was actually computed (e.g. perm1000 or
+        # perm10000) rather than hardcoding the permutation count: a mismatch here
+        # silently emptied i_fnames_glm below (caught by "if not i_fnames_glm: ...
+        # skipping"), which is why this map went missing without any visible error.
+        glm_dir_cands = glob.glob(os.path.join(
+            second_level_dir.format("glm"),
+            f"cluster_p{cluster_corr}_vox{vox_thr}_perm*"
+        ))
+        glm_dir = glm_dir_cands[0] if glm_dir_cands else None
+        if glm_dir is not None:
+            for acq_name in ["shimSlice+3mm","shimSlice+1mm+sms2","shimSlice+1mm+sms2+smooth3mm"]:
+                tag = "task-motor_acq-" + acq_name
+                nii_cands = glob.glob(os.path.join(glm_dir, tag, f"*_{tag}_t_clustercorrected.nii.gz"))
+                if not nii_cands:
+                    continue
+                nii_path = nii_cands[0]
+                i_fnames_glm.append(nii_path)
+                acq_names_glm.append(acq_name)
+                base = nii_path.split(".nii.gz")[0]
+                metrics_csvs.append(base + "_metrics.csv")
+                values_csvs.append(base + "_values.csv")
 
-            if not i_fnames_glm:
-                print(f"INFO: No GLM maps for cluster={cluster_corr} vox={vox_thr}, skipping.", flush=True)
-                continue
+        if not i_fnames_glm:
+            print(f"INFO: No GLM maps for cluster={cluster_corr} vox={vox_thr}, skipping.", flush=True)
+            continue
 
-            titles_glm = ["3mm", "1mm\nz-smoothed"]  # hardcoded for now, since only shimSlice is used in the GLM
+        titles_glm = ["3mm", "1mm\nz-smoothed"]  # hardcoded for now, since only shimSlice is used in the GLM
 
-            glm_plot[cluster_corr][vox_thr] = figures.plot_fmri_maps(
-                i_fnames=i_fnames_glm,
-                output_fname=os.path.join(output_fig, f"n{len(IDs)}_glm_{cluster_corr}_vox{vox_thr}_avg_map.png"),
-                stat_min=1.6, stat_max=6, cbar_label='t-value',
-                titles=titles_glm,
-                background_fname=os.path.join(path_code, "template", config["PAM50_t2"]),
-                underlay_fname=os.path.join(path_code, "template", config["PAM50_gm"]), redo=True)
+        glm_plot[cluster_corr][vox_thr] = figures.plot_fmri_maps(
+            i_fnames=[i_fnames_glm[0], i_fnames_glm[2]],
+            output_fname=os.path.join(output_fig, f"n{len(IDs)}_glm_{cluster_corr}_vox{vox_thr}_avg_map.png"),
+            stat_min=1.6, stat_max=6, cbar_label='t-value',
+            titles=titles_glm,
+            background_fname=os.path.join(path_code, "template", config["PAM50_t2"]),
+            underlay_fname=os.path.join(path_code, "template", config["PAM50_gm"]), redo=redo)
 
-            glm_axial_plot[cluster_corr][vox_thr] = figures.plot_fmri_maps_axial(
-                i_fnames=i_fnames_glm,
-                output_fname=os.path.join(output_fig, f"n{len(IDs)}_glm_axial_{cluster_corr}_vox{vox_thr}_avg_map.png"),
-                stat_min=1.6, stat_max=6, cbar_label='t-value',
-                titles=titles_glm,
-                background_fname=os.path.join(path_code, "template", config["PAM50_t2"]),
-                underlay_fname=os.path.join(path_code, "template", config["PAM50_gm"]),
-                z_slices=z_slices, n_slices=len(z_slices), redo=True)
+        glm_axial_plot[cluster_corr][vox_thr] = figures.plot_fmri_maps_axial(
+            i_fnames=[i_fnames_glm[0], i_fnames_glm[2]],
+            output_fname=os.path.join(output_fig, f"n{len(IDs)}_glm_axial_{cluster_corr}_vox{vox_thr}_avg_map.png"),
+            stat_min=1.6, stat_max=6, cbar_label='t-value',
+            titles=titles_glm,
+            background_fname=os.path.join(path_code, "template", config["PAM50_t2"]),
+            underlay_fname=os.path.join(path_code, "template", config["PAM50_gm"]),
+            z_slices=z_slices, n_slices=len(z_slices), redo=redo)
 
-            figures.plot_fmri_maps_axial(
-                i_fnames=i_fnames_glm,
-                output_fname=os.path.join(output_fig, f"n{len(IDs)}_glm_axial_mip_{cluster_corr}_vox{vox_thr}_avg_map.png"),
-                stat_min=1.6, stat_max=6, cbar_label='t-value',
-                titles=titles_glm,
-                background_fname=os.path.join(path_code, "template", config["PAM50_t2"]),
-                underlay_fname=os.path.join(path_code, "template", config["PAM50_gm"]),
-                mip=True, redo=True)
+        figures.plot_fmri_maps_axial(
+            i_fnames=[i_fnames_glm[0], i_fnames_glm[2]],
+            output_fname=os.path.join(output_fig, f"n{len(IDs)}_glm_axial_mip_{cluster_corr}_vox{vox_thr}_avg_map.png"),
+            stat_min=1.6, stat_max=6, cbar_label='t-value',
+            titles=titles_glm,
+            background_fname=os.path.join(path_code, "template", config["PAM50_t2"]),
+            underlay_fname=os.path.join(path_code, "template", config["PAM50_gm"]),
+            mip=True, redo=redo)
 
-            if metrics_csvs:
-                bar_plot[cluster_corr][vox_thr] = figures.bar_plot(
-                    csv_pair=metrics_csvs, figsize=(2, 2.7),
-                    maps_name = titles_glm,
-                    output_fname=os.path.join(output_fig, f"n{len(IDs)}_glm_cluster{cluster_corr}_vox{vox_thr}_nb_vox.png"),
-                    redo=redo)
+        if metrics_csvs:
+            bar_plot[cluster_corr][vox_thr] = figures.bar_plot(
+                csv_pair=metrics_csvs, figsize=(2, 2.7),
+                maps_name = ["3mm","1mm", "1mm \nz-smoothed",],
+                colors=["#ED263F","#F098A4", "#ADA8A8"],
+                output_fname=os.path.join(output_fig, f"n{len(IDs)}_glm_cluster{cluster_corr}_vox{vox_thr}_nb_vox.png"),
+                redo=redo)
 
-            if len(values_csvs) >= 2:
-                dist_plot[cluster_corr][vox_thr] = figures.plot_dist(
-                    csv_pair=[values_csvs[1], values_csvs[0]],
-                    maps_name=["1mm z-smoothed", "3mm"],
-                    colors=["#ED263F", "#ADA8A8"], figsize=(2, 2.7),
-                    output_fname=os.path.join(output_fig, f"n{len(IDs)}_glm_cluster{cluster_corr}_vox{vox_thr}_distr.png"),
-                    redo=redo)
+        if len(values_csvs) >= 2:
+            dist_plot[cluster_corr][vox_thr] = figures.plot_dist(
+                csv_pair=[values_csvs[2],values_csvs[1], values_csvs[0]],
+                maps_name=["1mm z-smoothed","1mm" "3mm"],
+                colors=["#ED263F","#F098A4", "#ADA8A8"], figsize=(2, 2.7),
+                output_fname=os.path.join(output_fig, f"n{len(IDs)}_glm_cluster{cluster_corr}_vox{vox_thr}_distr.png"),
+                redo=True)
 
-            if vox_thr in glm_plot.get(cluster_corr, {}):
-                figures.combine_plots(
-                    output_fname=os.path.join(output_fig, f"n{len(IDs)}_combined_task_cluster_{cluster_corr}_vox_{vox_thr}_plots.png"),
-                    map_files=[glm_plot[cluster_corr][vox_thr]],
-                    axial_files=[glm_axial_plot[cluster_corr][vox_thr]],
-                    graph_files=[
-                        bar_plot[cluster_corr].get(vox_thr),
-                        dist_plot.get(cluster_corr, {}).get(vox_thr)
-                    ],
-                    label_idx=True, figsize=(5, 3.8), redo=True)
-except Exception as e:
-    print(f"WARNING: GLM group maps failed: {e}", flush=True)
+        if vox_thr in glm_plot.get(cluster_corr, {}):
+            figures.combine_plots(
+                output_fname=os.path.join(output_fig, f"n{len(IDs)}_combined_task_cluster_{cluster_corr}_vox_{vox_thr}_plots.png"),
+                map_files=[glm_plot[cluster_corr][vox_thr]],
+                axial_files=None,
+                graph_files=[
+                    bar_plot[cluster_corr].get(vox_thr),
+                    dist_plot.get(cluster_corr, {}).get(vox_thr)
+                ],
+                label_idx=True, figsize=(5, 3.8), redo=True)
+# except Exception as e:
+#     print(f"WARNING: GLM group maps failed: {e}", flush=True)
 
 # ------------------------------------------------------------------
 # 5b. GLM uncorrected maps (for exploratory display with small N)
