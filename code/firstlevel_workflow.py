@@ -93,7 +93,7 @@ for ID_nb, ID in enumerate(IDs):
         for acq_name in config["design_exp"]["acq_names"]:
             tag="task-" + task_name + "_acq-" + acq_name
             tag_ref="task-" + task_name + "_acq-" + acq_name.replace("+smooth3mm","") if acq_name=="shimSlice+1mm+sms2+smooth3mm" else tag
-            denoised_candidates = glob.glob(os.path.join(denoising_dir.format(ID), tag, config["denoising"]["denoised_dir"],"*_nostd.nii.gz"))
+            denoised_candidates = glob.glob(os.path.join(denoising_dir.format(ID), tag, config["denoising"]["denoised_dir"],"*_nostd_s.nii.gz"))
             if denoised_candidates:
                 denoised_fmri = denoised_candidates[0]
             else:
@@ -169,19 +169,6 @@ for ID_nb, ID in enumerate(IDs):
                         n_jobs=1,
                         verbose=False,
                         redo=redo)
-                
-                #------ Apply smoothing ------------------------------------------------------------------
-                smooth_beta_imag_file=norm_beta_maps[0].split(".")[0] + "_s.nii.gz" # use for second level analysis
-                smooth_z_imag_file=norm_z_maps[0].split(".")[0] + "_s.nii.gz" # use for individual map plotting
-                fwhm=[1.5,1.5,4]
-                
-                if not os.path.exists(smooth_beta_imag_file):
-                    smoothed_image=image.smooth_img(norm_beta_maps[0], fwhm)
-                    smoothed_image.to_filename(smooth_beta_imag_file)
-
-                if not os.path.exists(smooth_z_imag_file):
-                    smoothed_image=image.smooth_img(norm_z_maps[0], fwhm)
-                    smoothed_image.to_filename(smooth_z_imag_file)
 
     print(f'=== First level done for : {ID} ===', flush=True)
     print("=========================================", flush=True)

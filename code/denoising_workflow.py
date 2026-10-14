@@ -196,7 +196,25 @@ for ID_nb,ID in enumerate(IDs):
                     utils.smooth_slices_img(i_img=Clean_image_file,
                                             o_img=Clean_image_file_3mmzsmooth,
                                             redo=redo, 
-                                            verbose=verbose)    
+                                            verbose=verbose)
+
+                #------------------------------------------------------------------
+                #------ Apply smoothing
+                #------------------------------------------------------------------
+                fwhm=[1.5,1.5,3]
+                if acq_name == "shimSlice+1mm+sms2":
+                    smooth_imag_files=[Clean_image_file.split(".")[0] + "_s.nii.gz",Clean_image_file_3mmzsmooth.split(".")[0]+ "_s.nii.gz"]
+                    clean_imag_files=[Clean_image_file,Clean_image_file_3mmzsmooth]
+                    
+                else:
+                    smooth_imag_files=[Clean_image_file.split(".")[0] + "_s.nii.gz"]
+                    clean_imag_files=[Clean_image_file]
+                   
+                for i,smooth_imag_file in enumerate(smooth_imag_files):
+                    if not os.path.exists("smooth_imag_file"):
+                        smoothed_image=image.smooth_img(clean_imag_files[i], fwhm)
+                        smoothed_image.to_filename(smooth_imag_file)
+
 
     print(f'=== Denoising done for : {ID} ===', flush=True)
     print("=========================================", flush=True)
