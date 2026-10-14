@@ -170,9 +170,9 @@ ACQ_DISPLAY_NAMES = {
 print("", flush=True)
 print("=== GLM group maps ===", flush=True)
 # try:
-glm_plot = {}; glm_axial_plot = {}; bar_plot = {}; dist_plot = {}
+glm_plot = {}; glm_axial_plot = {};glm_axial_mip_plot={}; bar_plot = {}; dist_plot = {}
 for cluster_corr in [0.01,0.05]:
-    glm_plot[cluster_corr] = {}; glm_axial_plot[cluster_corr] = {}
+    glm_plot[cluster_corr] = {}; glm_axial_plot[cluster_corr] = {};glm_axial_mip_plot[cluster_corr] = {}
     bar_plot[cluster_corr] = {}; dist_plot[cluster_corr] = {}
     z_slices = [314, 263, 256, 236, 128]
     for vox_thr in [0.05]:
@@ -206,7 +206,7 @@ for cluster_corr in [0.01,0.05]:
             print(f"INFO: No GLM maps for cluster={cluster_corr} vox={vox_thr}, skipping.", flush=True)
             continue
 
-        titles_glm = ["3mm", "1mm", "1mm\nz-smoothed"]  # hardcoded for now, since only shimSlice is used in the GLM
+        titles_glm = ["3mm\n", "1mm\n", "1mm\nz-smoothed"]  # hardcoded for now, since only shimSlice is used in the GLM
 
         glm_plot[cluster_corr][vox_thr] = figures.plot_fmri_maps(
             i_fnames=i_fnames_glm,
@@ -214,7 +214,7 @@ for cluster_corr in [0.01,0.05]:
             stat_min=1.6, stat_max=6, cbar_label='t-value',
             titles=titles_glm,
             background_fname=os.path.join(path_code, "template", config["PAM50_t2"]),
-            underlay_fname=os.path.join(path_code, "template", config["PAM50_gm"]), redo=True)
+            underlay_fname=os.path.join(path_code, "template", config["PAM50_gm"]), redo=redo)
 
         glm_axial_plot[cluster_corr][vox_thr] = figures.plot_fmri_maps_axial(
             i_fnames=[i_fnames_glm[0], i_fnames_glm[2]],
@@ -225,8 +225,8 @@ for cluster_corr in [0.01,0.05]:
             underlay_fname=os.path.join(path_code, "template", config["PAM50_gm"]),
             z_slices=z_slices, n_slices=len(z_slices), redo=redo)
 
-        figures.plot_fmri_maps_axial(
-            i_fnames=[i_fnames_glm[0], i_fnames_glm[2]],
+        glm_axial_mip_plot[cluster_corr][vox_thr] =figures.plot_fmri_maps_axial(
+            i_fnames=i_fnames_glm,
             output_fname=os.path.join(output_fig, f"n{len(IDs)}_glm_axial_mip_{cluster_corr}_vox{vox_thr}_avg_map.png"),
             stat_min=1.6, stat_max=6, cbar_label='t-value',
             titles=titles_glm,
@@ -238,15 +238,15 @@ for cluster_corr in [0.01,0.05]:
             bar_plot[cluster_corr][vox_thr] = figures.bar_plot(
                 csv_files=metrics_csvs, figsize=(2, 2.7),
                 maps_name = titles_glm,
-                colors=["#ED263F","#F098A4", "#ADA8A8"],
+                colors=["#ADA8A8","#F098A4","#ED263F"],
                 output_fname=os.path.join(output_fig, f"n{len(IDs)}_glm_cluster{cluster_corr}_vox{vox_thr}_nb_vox.png"),
                 redo=redo)
 
         if len(values_csvs) >= 2:
             dist_plot[cluster_corr][vox_thr] = figures.plot_dist(
                 csv_files=[values_csvs[2],values_csvs[1], values_csvs[0]],
-                maps_name=["1mm z-smoothed","1mm", "3mm"],
-                colors=["#ED263F","#F098A4", "#ADA8A8"], figsize=(2, 2.7),
+                maps_name=["1mm \nz-smoothed","1mm", "3mm"],
+                colors=["#ED263F","#E5ACB3", "#ADA8A8"], figsize=(2, 2.7),
                 output_fname=os.path.join(output_fig, f"n{len(IDs)}_glm_cluster{cluster_corr}_vox{vox_thr}_distr.png"),
                 redo=redo)
 
@@ -254,7 +254,7 @@ for cluster_corr in [0.01,0.05]:
             figures.combine_plots(
                 output_fname=os.path.join(output_fig, f"n{len(IDs)}_combined_task_cluster_{cluster_corr}_vox_{vox_thr}_plots.png"),
                 map_files=[glm_plot[cluster_corr][vox_thr]],
-                axial_files=None,
+                axial_files=[glm_axial_mip_plot[cluster_corr][vox_thr]],
                 graph_files=[
                     bar_plot[cluster_corr].get(vox_thr),
                     dist_plot.get(cluster_corr, {}).get(vox_thr)

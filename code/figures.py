@@ -272,7 +272,7 @@ class Figures_main:
         # --- Figure and gridspec ---
         if not os.path.exists(output_fname) or redo:
             fig = plt.figure(figsize=(n_maps, 3))  # width scales with number of maps
-            fig.subplots_adjust(left=0.01, right=0.85, top=0.91, bottom=0)
+            fig.subplots_adjust(left=0.01, right=0.85, top=0.90, bottom=0)
 
             height_ratios = [6, 0.2]
             gs = fig.add_gridspec(nrows=2, ncols=n_maps,
@@ -324,7 +324,7 @@ class Figures_main:
                     im_cor = ax_cor.imshow(cor_slice, cmap=cmap, origin="lower", vmin=stat_min, vmax=stat_max, aspect="auto")
 
                 ax_cor.axis("off")
-                ax_cor.set_title(titles[i], color="black", fontweight='bold', fontsize=7, fontname="Arial")
+                ax_cor.set_title(titles[i], color="black", fontweight='bold', fontsize=8, fontname="Arial")
 
                 # orientation labels only on first map
                 if i == 0:
@@ -415,8 +415,8 @@ class Figures_main:
             for col, fname in enumerate(i_fnames):
                 stat_img = nib.as_closest_canonical(nib.load(fname))
                 statmap_data = stat_img.get_fdata()
-                crop_stat = statmap_data[x_min_axi:x_max_axi, y_min_axi:y_max_axi, :]
-                crop_tmpl = template_data[x_min_axi:x_max_axi, y_min_axi:y_max_axi, :]
+                crop_stat = statmap_data[x_min_axi:x_max_axi, y_min_axi+6:y_max_axi, :]
+                crop_tmpl = template_data[x_min_axi:x_max_axi, y_min_axi+6:y_max_axi, :]
 
                 if mip:
                     z_mid = crop_tmpl.shape[2] // 2  # anatomical background only, not the overlay
@@ -426,7 +426,7 @@ class Figures_main:
                     ax.imshow(tmpl_slice, cmap="gray", origin="lower", aspect="equal")
 
                     if underlay_fname is not None:
-                        underlay_slice = underlay_data[x_min_axi:x_max_axi, y_min_axi:y_max_axi, z_mid].T
+                        underlay_slice = underlay_data[x_min_axi:x_max_axi, y_min_axi+6:y_max_axi, z_mid].T
                         ax.imshow(underlay_slice, cmap="gray", origin="lower", aspect="auto", alpha=0.1)
 
                     stat_mip = np.max(crop_stat, axis=2)
@@ -435,6 +435,12 @@ class Figures_main:
                     if np.nansum(stat_mip) > 0:
                         ax.imshow(stat_mip, cmap=cmap, origin="lower",
                                 vmin=stat_min, vmax=stat_max, aspect="auto")
+
+                    if col == 0:
+                        ax.text(0.02, 0.5, "L", transform=ax.transAxes, color="white", fontsize=4, ha="left", va="center")
+                        ax.text(0.98, 0.5, "R", transform=ax.transAxes, color="white", fontsize=4, ha="right", va="center")
+                        ax.text(0.5, 0.95, "A", transform=ax.transAxes, color="white", fontsize=4, ha="center", va="top")
+                        ax.text(0.5, 0.2, "P", transform=ax.transAxes, color="white", fontsize=4, ha="center", va="top")
 
                     ax.axis("off")
 
@@ -584,8 +590,8 @@ class Figures_main:
             ax.set_xticks(range(len(values)))
             ax.set_xticklabels(
                 [maps_name[i] for i in range(len(values))],
-                rotation=45, fontsize=8, fontweight='bold', fontname="Arial", ha='right')
-            ax.set_ylabel("# significant voxels", fontsize=12, fontweight='bold', fontname="Arial")
+                rotation=45, fontsize=9, fontweight='bold', fontname="Arial", ha='right')
+            ax.set_ylabel("# significant voxels", fontsize=10, fontweight='bold', fontname="Arial")
             ax.tick_params(axis='y', labelsize=7)
             #ax.yaxis.set_label_coords(-0.9, 0.5)
             ax.tick_params(axis='y', which='both', pad=2)
@@ -600,7 +606,7 @@ class Figures_main:
         
         return output_fname
 
-    def plot_dist(self, csv_files=None,output_fname=None,colors=None, maps_name=None,bins=100,figsize=(1.8, 2.3),width=0.5, alpha=0.8, redo=False):
+    def plot_dist(self, csv_files=None,output_fname=None,colors=None, maps_name=None,xmin=1.6,xmax=8, bins=100,figsize=(1.8, 2.3),width=0.5, alpha=0.8, redo=False):
         """
         Plot a bar chart of suprathreshold voxel counts as a standalone figure.
 
@@ -646,9 +652,10 @@ class Figures_main:
                 ax.hist(values_clean, bins=bins, color=colors[i], alpha=alpha,
                         label=maps_name[i], density=False)
 
-            ax.set_xlabel("t-value", fontsize=12, fontweight='bold', fontname="Arial")
-            ax.set_ylabel("# significant voxels", fontsize=12, fontweight='bold', fontname="Arial")
+            ax.set_xlabel("t-value", fontsize=10, fontweight='bold', fontname="Arial")
+            ax.set_ylabel("# significant voxels", fontsize=10, fontweight='bold', fontname="Arial")
             ax.tick_params(axis='both', labelsize=7)
+            ax.set_xlim(xmin, xmax)
 
             # Get current handles and labels
             handles, labels = ax.get_legend_handles_labels()
@@ -658,11 +665,12 @@ class Figures_main:
                 labels = ["shimBase", "shimSlice"]
                 ax.legend(handles, labels, fontsize=8.5, frameon=False, loc='upper right')
             else:
-                ax.legend(fontsize=8.5, frameon=False, loc='upper right')
+                ax.legend(handles[::-1],labels[::-1],frameon=False, loc='upper right',#bbox_to_anchor=(1, 1.0),
+                          prop={"family": "Arial", "size": 8.5})
 
             ax.spines['top'].set_visible(False)
             ax.spines['right'].set_visible(False)
-
+            
             plt.tight_layout()
 
             plt.savefig(output_fname,transparent=True, dpi=600)
@@ -930,6 +938,8 @@ class Figures_main:
                 graph_h, graph_w = graph_img.shape[:2]
                 graph_col_width = graph_cell_height * (graph_w / graph_h) *0.3
                 graph_widths = [(graph_col_width / map_col_width) * graph_col_scale] * n_graph_cols
+                if n_graph_cols > 1:
+                    graph_widths[-1] *= 0.6  # last graph column 40% narrower
             else:
                 graph_widths = []
 
@@ -1008,7 +1018,7 @@ class Figures_main:
                         ax_inner.set_title(graph_titles[i], fontsize=7,
                                         fontweight='bold', fontname="Arial")
                     add_label(ax)
-
+            
             fig.subplots_adjust(wspace=col_wspace, hspace=0.1,
                                 left=0.01, right=1, top=0.93, bottom=0.01)
             plt.savefig(output_fname, dpi=600, transparent=True, bbox_inches='tight')
