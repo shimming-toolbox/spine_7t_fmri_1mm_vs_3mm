@@ -267,7 +267,6 @@ class Figures_main:
         if background_fname is None:
             raise ValueError("Please provide PAM50 template filename")
 
-        assert len(i_fnames) in [1, 2], f"Expected 1 or 2 maps, got {len(i_fnames)}"
         n_maps = len(i_fnames)
 
         # --- Figure and gridspec ---

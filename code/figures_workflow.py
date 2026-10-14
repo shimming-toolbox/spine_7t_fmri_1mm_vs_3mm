@@ -206,15 +206,15 @@ for cluster_corr in [0.01,0.05]:
             print(f"INFO: No GLM maps for cluster={cluster_corr} vox={vox_thr}, skipping.", flush=True)
             continue
 
-        titles_glm = ["3mm", "1mm\nz-smoothed"]  # hardcoded for now, since only shimSlice is used in the GLM
+        titles_glm = ["3mm", "1mm", "1mm\nz-smoothed"]  # hardcoded for now, since only shimSlice is used in the GLM
 
         glm_plot[cluster_corr][vox_thr] = figures.plot_fmri_maps(
-            i_fnames=[i_fnames_glm[0], i_fnames_glm[2]],
+            i_fnames=i_fnames_glm,
             output_fname=os.path.join(output_fig, f"n{len(IDs)}_glm_{cluster_corr}_vox{vox_thr}_avg_map.png"),
             stat_min=1.6, stat_max=6, cbar_label='t-value',
             titles=titles_glm,
             background_fname=os.path.join(path_code, "template", config["PAM50_t2"]),
-            underlay_fname=os.path.join(path_code, "template", config["PAM50_gm"]), redo=redo)
+            underlay_fname=os.path.join(path_code, "template", config["PAM50_gm"]), redo=True)
 
         glm_axial_plot[cluster_corr][vox_thr] = figures.plot_fmri_maps_axial(
             i_fnames=[i_fnames_glm[0], i_fnames_glm[2]],
@@ -237,7 +237,7 @@ for cluster_corr in [0.01,0.05]:
         if metrics_csvs:
             bar_plot[cluster_corr][vox_thr] = figures.bar_plot(
                 csv_files=metrics_csvs, figsize=(2, 2.7),
-                maps_name = ["3mm","1mm", "1mm \nz-smoothed",],
+                maps_name = titles_glm,
                 colors=["#ED263F","#F098A4", "#ADA8A8"],
                 output_fname=os.path.join(output_fig, f"n{len(IDs)}_glm_cluster{cluster_corr}_vox{vox_thr}_nb_vox.png"),
                 redo=redo)
@@ -248,7 +248,7 @@ for cluster_corr in [0.01,0.05]:
                 maps_name=["1mm z-smoothed","1mm", "3mm"],
                 colors=["#ED263F","#F098A4", "#ADA8A8"], figsize=(2, 2.7),
                 output_fname=os.path.join(output_fig, f"n{len(IDs)}_glm_cluster{cluster_corr}_vox{vox_thr}_distr.png"),
-                redo=True)
+                redo=redo)
 
         if vox_thr in glm_plot.get(cluster_corr, {}):
             figures.combine_plots(
@@ -259,7 +259,7 @@ for cluster_corr in [0.01,0.05]:
                     bar_plot[cluster_corr].get(vox_thr),
                     dist_plot.get(cluster_corr, {}).get(vox_thr)
                 ],
-                label_idx=True, figsize=(5, 3.8), redo=True)
+                label_idx=True, figsize=(5, 3.8), redo=redo)
 # except Exception as e:
 #     print(f"WARNING: GLM group maps failed: {e}", flush=True)
 
