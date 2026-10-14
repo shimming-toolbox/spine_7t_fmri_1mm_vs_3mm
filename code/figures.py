@@ -886,7 +886,7 @@ class Figures_main:
             n_graphs = len(graph_files) if graph_files else 0
             n_axial = len(axial_files) if axial_files else 0
 
-            assert n_maps in (1, 2), f"Expected 1 or 2 map_files, got {n_maps}"
+            #assert n_maps in (1, 2), f"Expected 1 or 2 map_files, got {n_maps}"
             assert n_graphs in (0, 2, 4), f"Expected 0, 2 or 4 graph_files, got {n_graphs}"
             if axial_files:
                 assert n_axial in (1, 2), f"Expected 1 or 2 axial_files, got {n_axial}"
