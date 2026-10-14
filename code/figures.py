@@ -243,7 +243,7 @@ class Figures_main:
 
             # Label sits above the colorbar (horizontal, not rotated) so it can't collide
             # with the last participant's title, regardless of figure width/subject count.
-            cbar.ax.text(0.8, 1.3, "t-score\n(uncorrected)", fontsize=7, va="bottom", ha="center", transform=cbar.ax.transAxes)
+            cbar.ax.text(0.8, 1.3, "z-score\n(uncorrected)", fontsize=7, va="bottom", ha="center", transform=cbar.ax.transAxes)
             cbar.ax.text(0.9, -0.1, f"{stat_min:.1f}", fontsize=7,va="center", ha="right", transform=cbar.ax.transAxes)
             cbar.ax.text(0.9, 1.1, f"{stat_max:.1f}", fontsize=7, va="center", ha="right", transform=cbar.ax.transAxes)
 
@@ -273,7 +273,7 @@ class Figures_main:
         # --- Figure and gridspec ---
         if not os.path.exists(output_fname) or redo:
             fig = plt.figure(figsize=(n_maps, 3))  # width scales with number of maps
-            fig.subplots_adjust(left=0.01, right=0.99, top=0.92, bottom=0.1)
+            fig.subplots_adjust(left=0.01, right=0.99, top=0.91, bottom=0.1)
 
             height_ratios = [6, 0.2]
             gs = fig.add_gridspec(nrows=2, ncols=n_maps,
@@ -325,7 +325,7 @@ class Figures_main:
                     im_cor = ax_cor.imshow(cor_slice, cmap=cmap, origin="lower", vmin=stat_min, vmax=stat_max, aspect="auto")
 
                 ax_cor.axis("off")
-                ax_cor.set_title(titles[i], color="black", fontweight='bold', fontsize=9, fontname="Arial")
+                ax_cor.set_title(titles[i], color="black", fontweight='bold', fontsize=7, fontname="Arial")
 
                 # orientation labels only on first map
                 if i == 0:
@@ -377,7 +377,7 @@ class Figures_main:
 
         if not os.path.exists(output_fname) or redo:
             fig = plt.figure(figsize=(n_maps * 0.6, n_rows_plot * 0.6))
-            fig.subplots_adjust(left=0.01, right=0.99, top=0.92, bottom=0.05)
+            fig.subplots_adjust(left=0.01, right=0.99, top=0.91, bottom=0.05)
 
             gs = fig.add_gridspec(nrows=n_rows_plot, ncols=n_maps,
                                 hspace=0.01, wspace=0.05)
@@ -440,7 +440,7 @@ class Figures_main:
                     ax.axis("off")
 
                     ax.set_title(titles[col], color="black", fontweight='bold',
-                                fontsize=9, fontname="Arial")
+                                fontsize=7, fontname="Arial")
                     continue
 
                 for row, z in enumerate(selected_z):
@@ -477,7 +477,7 @@ class Figures_main:
                     # Column title on first row only
                     if row == 0:
                         ax.set_title(titles[col], color="black", fontweight='bold',
-                                    fontsize=9, fontname="Arial")
+                                    fontsize=7, fontname="Arial")
 
             plt.savefig(output_fname, transparent=True, dpi=600)
             plt.close(fig)
