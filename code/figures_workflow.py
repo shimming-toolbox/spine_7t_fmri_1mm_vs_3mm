@@ -236,7 +236,7 @@ for cluster_corr in [0.01,0.05]:
 
         if metrics_csvs:
             bar_plot[cluster_corr][vox_thr] = figures.bar_plot(
-                csv_pair=metrics_csvs, figsize=(2, 2.7),
+                csv_files=metrics_csvs, figsize=(2, 2.7),
                 maps_name = ["3mm","1mm", "1mm \nz-smoothed",],
                 colors=["#ED263F","#F098A4", "#ADA8A8"],
                 output_fname=os.path.join(output_fig, f"n{len(IDs)}_glm_cluster{cluster_corr}_vox{vox_thr}_nb_vox.png"),
@@ -244,8 +244,8 @@ for cluster_corr in [0.01,0.05]:
 
         if len(values_csvs) >= 2:
             dist_plot[cluster_corr][vox_thr] = figures.plot_dist(
-                csv_pair=[values_csvs[2],values_csvs[1], values_csvs[0]],
-                maps_name=["1mm z-smoothed","1mm" "3mm"],
+                csv_files=[values_csvs[2],values_csvs[1], values_csvs[0]],
+                maps_name=["1mm z-smoothed","1mm", "3mm"],
                 colors=["#ED263F","#F098A4", "#ADA8A8"], figsize=(2, 2.7),
                 output_fname=os.path.join(output_fig, f"n{len(IDs)}_glm_cluster{cluster_corr}_vox{vox_thr}_distr.png"),
                 redo=True)

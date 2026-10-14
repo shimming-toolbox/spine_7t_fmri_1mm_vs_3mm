@@ -594,14 +594,14 @@ class Figures_main:
         
         return output_fname
 
-    def plot_dist(self, csv_pair=None,output_fname=None,colors=None, maps_name=None,bins=100,figsize=(1.8, 2.3),width=0.5, alpha=0.8, redo=False):
+    def plot_dist(self, csv_files=None,output_fname=None,colors=None, maps_name=None,bins=100,figsize=(1.8, 2.3),width=0.5, alpha=0.8, redo=False):
         """
         Plot a bar chart of suprathreshold voxel counts as a standalone figure.
 
         Parameters
         ----------
-        csv_pair : list
-            List of two CSV filenames 
+        csv_files : list
+            List of CSV filenames 
         output_fname : str, optional
             Path to save the figure. If None, figure is returned without saving.
         colors : list, optional
@@ -621,7 +621,7 @@ class Figures_main:
         """
 
         if not os.path.exists(output_fname) or redo:
-            if csv_pair is None:
+            if csv_files is None:
                 raise ValueError("Please provide a list of two CSV filenames.")
         
             if colors is None:
@@ -629,7 +629,7 @@ class Figures_main:
             if maps_name is None:
                 maps_name = ["shimBase", "shimSlice"]
 
-            values_list = [pd.read_csv(f)["voxels_values"].values for f in csv_pair]
+            values_list = [pd.read_csv(f)["voxels_values"].values for f in csv_files]
             # --- Plot ---
             fig, ax = plt.subplots(figsize=figsize)
 
