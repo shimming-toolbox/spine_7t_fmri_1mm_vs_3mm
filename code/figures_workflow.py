@@ -113,7 +113,7 @@ try:
         output_fname=os.path.join(fig_dir_first, f"first_level_task_by_runs_n{len(i_fnames_by_runs)}.png"),
         background_fname=os.path.join(path_code, "template", config["PAM50_t2"]),
         mask_fname=common_mask_fname,
-        titles=["3mm", "1mm zsmoothed"],
+        titles=["3mm", "1mm z-smooth"],
         stat_min=1.6, stat_max=4,
         task_name=tag,
         participant_ids=used_ids,
@@ -206,7 +206,7 @@ try:
                 print(f"INFO: No GLM maps for cluster={cluster_corr} vox={vox_thr}, skipping.", flush=True)
                 continue
 
-            titles_glm = ["3mm\n", "1mm\n", "1mm\nz-smoothed"]  # hardcoded for now, since only shimSlice is used in the GLM
+            titles_glm = ["3mm\n", "1mm\n", "1mm\nz-smooth"]  # hardcoded for now, since only shimSlice is used in the GLM
 
             glm_plot[cluster_corr][vox_thr] = figures.plot_fmri_maps(
                 i_fnames=i_fnames_glm,
@@ -245,7 +245,7 @@ try:
             if len(values_csvs) >= 2:
                 dist_plot[cluster_corr][vox_thr] = figures.plot_dist(
                     csv_files=[values_csvs[2],values_csvs[1], values_csvs[0]],
-                    maps_name=["1mm \nz-smoothed","1mm", "3mm"],
+                    maps_name=["1mm \nz-smooth","1mm", "3mm"],
                     colors=["#ED263F","#E5ACB3", "#ADA8A8"], figsize=(2, 2.7),
                     output_fname=os.path.join(output_fig, f"n{len(IDs)}_glm_cluster{cluster_corr}_vox{vox_thr}_distr.png"),
                     redo=redo)
@@ -342,7 +342,7 @@ preprocessing_dir_compare = os.path.join(path_data, config["preprocess_dir"]["ma
 os.makedirs(out_dir, exist_ok=True)
 
 REGULAR_ACQS = config["design_exp"]["acq_names"]
-SMOOTH_ACQS  = [k for k in config.get("derived_acq", {}) if "smooth3mm" in k]
+SMOOTH_ACQS  = [k for k in config.get("derived_acq", {}) if "z-smooth" in k]
 AVG_ACQS     = [k for k in config.get("derived_acq", {}) if "avg3mm"    in k]
 DERIVED_ACQS = SMOOTH_ACQS + AVG_ACQS
 ALL_ACQS     = REGULAR_ACQS + DERIVED_ACQS
@@ -354,7 +354,7 @@ SHIM_TRIPLETS = [
 COLORS_3  = ["#ADA8A8", "#F098A4", "#ED263F"]
 XLABELS_3 = {
     "shimSlice+1mm+sms2":           "1mm\n(native)",
-    "shimSlice+1mm+sms2+smooth3mm": "1mm\n(smooth3mm)",
+    "shimSlice+1mm+sms2+smooth3mm": "1mm\n(z-smooth)",
     "shimSlice+3mm":                "3mm",
 }
 # One-sided p=0.01 threshold, same convention as T_THRESH_UNC for the group map (#87).
@@ -768,8 +768,8 @@ if not mi_df.empty and (not os.path.exists(fig_path_4) or redo):
 SNRPLOT_4COND = [
     ("shimBase+3mm",                  "rest", 0,    "#ADA8A8", "shimBase\n3mm"),
     ("shimSlice+3mm",                 "rest", 1,    "#3A3838", "shimSlice\n3mm"),
-    ("shimBase+1mm+sms2+smooth3mm",   "rest", 2.5,  "#F098A4", "shimBase\n1mm\n(smooth3mm)"),
-    ("shimSlice+1mm+sms2+smooth3mm",  "rest", 3.5,  "#ED263F", "shimSlice\n1mm\n(smooth3mm)"),
+    ("shimBase+1mm+sms2+smooth3mm",   "rest", 2.5,  "#F098A4", "shimBase\n1mm\n(z-smooth)"),
+    ("shimSlice+1mm+sms2+smooth3mm",  "rest", 3.5,  "#ED263F", "shimSlice\n1mm\n(z-smooth)"),
 ]    
 for snr_metric, col_name, ylabel in [
     ("tSNR", "tsnr_sc", "Mean tSNR within SC mask"),

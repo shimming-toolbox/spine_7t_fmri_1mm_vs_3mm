@@ -193,8 +193,8 @@ class Figures_main:
 
                     # Orientation labels only for first participant
                     if subj_idx == 0 and map_idx == 0:
-                        ax_cor.text(0.05, 0.05, "L", transform=ax_cor.transAxes, color="white", fontsize=3.5, ha="left", va="bottom")
-                        ax_cor.text(0.95, 0.05, "R", transform=ax_cor.transAxes, color="white", fontsize=3.5, ha="right", va="bottom")
+                        ax_cor.text(0.05, 0.05, "L", transform=ax_cor.transAxes, color="white", fontsize=7, ha="left", va="bottom")
+                        ax_cor.text(0.95, 0.05, "R", transform=ax_cor.transAxes, color="white", fontsize=7, ha="right", va="bottom")
 
                     # --- Axial (bottom row) ---
                     row_axi = row_start + 1
@@ -225,10 +225,10 @@ class Figures_main:
                     ax_axi.axis("off")
 
                     if subj_idx == 0 and map_idx == 0:
-                        ax_axi.text(0.02, 0.5, "L", transform=ax_axi.transAxes, color="white", fontsize=3.5, ha="left", va="center")
-                        ax_axi.text(0.98, 0.5, "R", transform=ax_axi.transAxes, color="white", fontsize=3.5, ha="right", va="center")
-                        ax_axi.text(0.5, 0.98, "A", transform=ax_axi.transAxes, color="white", fontsize=3.5, ha="center", va="top")
-                        ax_axi.text(0.5, 0.02, "P", transform=ax_axi.transAxes, color="white", fontsize=3.5, ha="center", va="bottom")
+                        ax_axi.text(0.02, 0.5, "L", transform=ax_axi.transAxes, color="white", fontsize=7, ha="left", va="center")
+                        ax_axi.text(0.98, 0.5, "R", transform=ax_axi.transAxes, color="white", fontsize=7, ha="right", va="center")
+                        ax_axi.text(0.5, 0.98, "A", transform=ax_axi.transAxes, color="white", fontsize=7, ha="center", va="top")
+                        ax_axi.text(0.5, 0.02, "P", transform=ax_axi.transAxes, color="white", fontsize=7, ha="center", va="bottom")
 
             # ---- Single colorbar (both conditions share the same colormap), placed once
             # ---- in figure-fraction coordinates (independent of the participant grid) ----
