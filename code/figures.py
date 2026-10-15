@@ -193,8 +193,8 @@ class Figures_main:
 
                     # Orientation labels only for first participant
                     if subj_idx == 0 and map_idx == 0:
-                        ax_cor.text(0.05, 0.05, "L", transform=ax_cor.transAxes, color="white", fontsize=3.5, ha="left", va="bottom")
-                        ax_cor.text(0.95, 0.05, "R", transform=ax_cor.transAxes, color="white", fontsize=3.5, ha="right", va="bottom")
+                        ax_cor.text(0.05, 0.05, "L", transform=ax_cor.transAxes, color="white", fontsize=7, ha="left", va="bottom")
+                        ax_cor.text(0.95, 0.05, "R", transform=ax_cor.transAxes, color="white", fontsize=7, ha="right", va="bottom")
 
                     # --- Axial (bottom row) ---
                     row_axi = row_start + 1
@@ -225,10 +225,10 @@ class Figures_main:
                     ax_axi.axis("off")
 
                     if subj_idx == 0 and map_idx == 0:
-                        ax_axi.text(0.02, 0.5, "L", transform=ax_axi.transAxes, color="white", fontsize=3.5, ha="left", va="center")
-                        ax_axi.text(0.98, 0.5, "R", transform=ax_axi.transAxes, color="white", fontsize=3.5, ha="right", va="center")
-                        ax_axi.text(0.5, 0.98, "A", transform=ax_axi.transAxes, color="white", fontsize=3.5, ha="center", va="top")
-                        ax_axi.text(0.5, 0.02, "P", transform=ax_axi.transAxes, color="white", fontsize=3.5, ha="center", va="bottom")
+                        ax_axi.text(0.02, 0.5, "L", transform=ax_axi.transAxes, color="white", fontsize=7, ha="left", va="center")
+                        ax_axi.text(0.98, 0.5, "R", transform=ax_axi.transAxes, color="white", fontsize=7, ha="right", va="center")
+                        ax_axi.text(0.5, 0.98, "A", transform=ax_axi.transAxes, color="white", fontsize=7, ha="center", va="top")
+                        ax_axi.text(0.5, 0.02, "P", transform=ax_axi.transAxes, color="white", fontsize=7, ha="center", va="bottom")
 
             # ---- Single colorbar (both conditions share the same colormap), placed once
             # ---- in figure-fraction coordinates (independent of the participant grid) ----
@@ -243,7 +243,7 @@ class Figures_main:
 
             # Label sits above the colorbar (horizontal, not rotated) so it can't collide
             # with the last participant's title, regardless of figure width/subject count.
-            cbar.ax.text(0.8, 1.3, "t-score\n(uncorrected)", fontsize=7, va="bottom", ha="center", transform=cbar.ax.transAxes)
+            cbar.ax.text(0.8, 1.3, "z-score\n(uncorrected)", fontsize=7, va="bottom", ha="center", transform=cbar.ax.transAxes)
             cbar.ax.text(0.9, -0.1, f"{stat_min:.1f}", fontsize=7,va="center", ha="right", transform=cbar.ax.transAxes)
             cbar.ax.text(0.9, 1.1, f"{stat_max:.1f}", fontsize=7, va="center", ha="right", transform=cbar.ax.transAxes)
 
@@ -267,13 +267,12 @@ class Figures_main:
         if background_fname is None:
             raise ValueError("Please provide PAM50 template filename")
 
-        assert len(i_fnames) in [1, 2], f"Expected 1 or 2 maps, got {len(i_fnames)}"
         n_maps = len(i_fnames)
 
         # --- Figure and gridspec ---
         if not os.path.exists(output_fname) or redo:
             fig = plt.figure(figsize=(n_maps, 3))  # width scales with number of maps
-            fig.subplots_adjust(left=0.01, right=0.99, top=0.92, bottom=0.1)
+            fig.subplots_adjust(left=0.01, right=0.85, top=0.90, bottom=0)
 
             height_ratios = [6, 0.2]
             gs = fig.add_gridspec(nrows=2, ncols=n_maps,
@@ -325,7 +324,7 @@ class Figures_main:
                     im_cor = ax_cor.imshow(cor_slice, cmap=cmap, origin="lower", vmin=stat_min, vmax=stat_max, aspect="auto")
 
                 ax_cor.axis("off")
-                ax_cor.set_title(titles[i], color="black", fontweight='bold', fontsize=9, fontname="Arial")
+                ax_cor.set_title(titles[i], color="black", fontweight='bold', fontsize=8, fontname="Arial")
 
                 # orientation labels only on first map
                 if i == 0:
@@ -339,10 +338,11 @@ class Figures_main:
                 stat_max=stat_max,
                 cmap=cmap,
                 label=cbar_label,
-                left=0.4 if n_maps == 2 else 0.35 ,
-                bottom=0.08, 
-                width=0.35 if n_maps == 2 else 0.44, 
-                height=0.02
+                orientation='vertical',
+                left=0.88,
+                bottom=0.18, 
+                width=0.03, 
+                height=0.2
                 )
 
             plt.savefig(output_fname, transparent=True, dpi=600)
@@ -368,7 +368,6 @@ class Figures_main:
         if background_fname is None:
             raise ValueError("Please provide PAM50 template filename")
 
-        assert len(i_fnames) in [1, 2], f"Expected 1 or 2 maps, got {len(i_fnames)}"
         n_maps = len(i_fnames)
         if titles is None:
             titles = [f"map{i}" for i in range(n_maps)]
@@ -377,7 +376,7 @@ class Figures_main:
 
         if not os.path.exists(output_fname) or redo:
             fig = plt.figure(figsize=(n_maps * 0.6, n_rows_plot * 0.6))
-            fig.subplots_adjust(left=0.01, right=0.99, top=0.92, bottom=0.05)
+            fig.subplots_adjust(left=0.01, right=0.85, top=0.99, bottom=0.05)
 
             gs = fig.add_gridspec(nrows=n_rows_plot, ncols=n_maps,
                                 hspace=0.01, wspace=0.05)
@@ -416,8 +415,8 @@ class Figures_main:
             for col, fname in enumerate(i_fnames):
                 stat_img = nib.as_closest_canonical(nib.load(fname))
                 statmap_data = stat_img.get_fdata()
-                crop_stat = statmap_data[x_min_axi:x_max_axi, y_min_axi:y_max_axi, :]
-                crop_tmpl = template_data[x_min_axi:x_max_axi, y_min_axi:y_max_axi, :]
+                crop_stat = statmap_data[x_min_axi:x_max_axi, y_min_axi+6:y_max_axi, :]
+                crop_tmpl = template_data[x_min_axi:x_max_axi, y_min_axi+6:y_max_axi, :]
 
                 if mip:
                     z_mid = crop_tmpl.shape[2] // 2  # anatomical background only, not the overlay
@@ -427,7 +426,7 @@ class Figures_main:
                     ax.imshow(tmpl_slice, cmap="gray", origin="lower", aspect="equal")
 
                     if underlay_fname is not None:
-                        underlay_slice = underlay_data[x_min_axi:x_max_axi, y_min_axi:y_max_axi, z_mid].T
+                        underlay_slice = underlay_data[x_min_axi:x_max_axi, y_min_axi+6:y_max_axi, z_mid].T
                         ax.imshow(underlay_slice, cmap="gray", origin="lower", aspect="auto", alpha=0.1)
 
                     stat_mip = np.max(crop_stat, axis=2)
@@ -437,10 +436,16 @@ class Figures_main:
                         ax.imshow(stat_mip, cmap=cmap, origin="lower",
                                 vmin=stat_min, vmax=stat_max, aspect="auto")
 
+                    if col == 0:
+                        ax.text(0.02, 0.5, "L", transform=ax.transAxes, color="white", fontsize=4, ha="left", va="center")
+                        ax.text(0.98, 0.5, "R", transform=ax.transAxes, color="white", fontsize=4, ha="right", va="center")
+                        ax.text(0.5, 0.95, "A", transform=ax.transAxes, color="white", fontsize=4, ha="center", va="top")
+                        ax.text(0.5, 0.2, "P", transform=ax.transAxes, color="white", fontsize=4, ha="center", va="top")
+
                     ax.axis("off")
 
                     ax.set_title(titles[col], color="black", fontweight='bold',
-                                fontsize=9, fontname="Arial")
+                                fontsize=7, fontname="Arial")
                     continue
 
                 for row, z in enumerate(selected_z):
@@ -477,7 +482,7 @@ class Figures_main:
                     # Column title on first row only
                     if row == 0:
                         ax.set_title(titles[col], color="black", fontweight='bold',
-                                    fontsize=9, fontname="Arial")
+                                    fontsize=7, fontname="Arial")
 
             plt.savefig(output_fname, transparent=True, dpi=600)
             plt.close(fig)
@@ -485,7 +490,7 @@ class Figures_main:
         return output_fname
 
     def plot_colorbar(self, fig, stat_min, stat_max, cmap='autumn',
-                  left=0.03, bottom=0.05, width=0.15, height=0.04,
+                  left=0.03, bottom=0.05, width=0.15, height=0.04,orientation='horizontal',
                   label='t-value', fontsize=7.5):
         """
         Plot a shared colorbar on a figure.
@@ -522,26 +527,33 @@ class Figures_main:
         sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
         sm.set_array([])
 
-        cbar = fig.colorbar(sm, cax=cbar_ax, orientation='horizontal')
+        cbar = fig.colorbar(sm, cax=cbar_ax, orientation=orientation)
         cbar.set_label(label, fontsize=fontsize, labelpad=3, fontweight='bold', fontname="Arial")
 
-        cbar.ax.text(1.4, 0.3, f"{stat_max:.1f}", fontsize=fontsize, va='center', ha='right',
-                    color='black', transform=cbar.ax.transAxes)
-        cbar.ax.text(-0.1, 0.3, f"{stat_min:.1f}", fontsize=fontsize, va='center', ha='right',
-                    color='black', transform=cbar.ax.transAxes)
+        if orientation == 'horizontal':
+            cbar.ax.text(0.5, 1.3, f"{stat_max:.1f}", fontsize=fontsize, va='bottom', ha='center',
+                        color='black', transform=cbar.ax.transAxes)
+            cbar.ax.text(0.5, -0.3, f"{stat_min:.1f}", fontsize=fontsize, va='top', ha='center',
+                        color='black', transform=cbar.ax.transAxes)
+        else:
+            cbar.ax.text(0.5, 1.09, f"{stat_max:.1f}", fontsize=fontsize, va='center', ha='center',
+                        color='black', transform=cbar.ax.transAxes)
+            cbar.ax.text(0.5, -0.1, f"{stat_min:.1f}", fontsize=fontsize, va='center', ha='center',
+                        color='black', transform=cbar.ax.transAxes)
         cbar.ax.set_xticks([])
+        cbar.ax.tick_params(which='both', length=0, labelright=False, labelleft=False)
         cbar.ax.set_frame_on(False)
 
         return cbar
     
-    def bar_plot(self,csv_pair=None,metric="nonzero_voxels",output_fname=None, colors = None, maps_name=None, figsize=(1.8, 2.5),width=0.5, alpha=0.8,redo=False):
+    def bar_plot(self,csv_files=None,metric="nonzero_voxels",output_fname=None, colors = None, maps_name=None, figsize=(1.8, 2.5),width=0.5, alpha=0.8,redo=False):
         """
-        Plot a bar chart of metrics loaded from a pair of CSV files.
+        Plot a bar chart of metrics loaded from CSV files.
 
         Parameters
         ----------
-        csv_pair : list
-            List of two CSV filenames (output of extract_metrics)
+        csv_files : list
+            List of CSV filenames (output of extract_metrics)
         output_fname : str, optional
             Path to save the figure. If None, figure is returned without saving.
         colors : list, optional
@@ -559,7 +571,7 @@ class Figures_main:
 
         """
         if not os.path.exists(output_fname) or redo:
-            if csv_pair is None:
+            if csv_files is None:
                 raise ValueError("Please provide a list of two CSV filenames.")
         
             if colors is None:
@@ -568,7 +580,7 @@ class Figures_main:
                 maps_name = ["shimBase", "shimSlice"]
 
             # --- Load metric from each CSV ---
-            values = [pd.read_csv(f)[metric].values[0] for f in csv_pair]
+            values = [pd.read_csv(f)[metric].values[0] for f in csv_files]
 
             # --- Plot ---
             fig, ax = plt.subplots(figsize=figsize)
@@ -578,8 +590,8 @@ class Figures_main:
             ax.set_xticks(range(len(values)))
             ax.set_xticklabels(
                 [maps_name[i] for i in range(len(values))],
-                rotation=45, fontsize=11, fontweight='bold', fontname="Arial", ha='right')
-            ax.set_ylabel("# significant voxels", fontsize=12, fontweight='bold', fontname="Arial")
+                rotation=45, fontsize=9, fontweight='bold', fontname="Arial", ha='right')
+            ax.set_ylabel("# significant voxels", fontsize=10, fontweight='bold', fontname="Arial")
             ax.tick_params(axis='y', labelsize=7)
             #ax.yaxis.set_label_coords(-0.9, 0.5)
             ax.tick_params(axis='y', which='both', pad=2)
@@ -594,14 +606,14 @@ class Figures_main:
         
         return output_fname
 
-    def plot_dist(self, csv_pair=None,output_fname=None,colors=None, maps_name=None,bins=100,figsize=(1.8, 2.3),width=0.5, alpha=0.8, redo=False):
+    def plot_dist(self, csv_files=None,output_fname=None,colors=None, maps_name=None,xmin=1.6,xmax=8, bins=100,figsize=(1.8, 2.3),width=0.5, alpha=0.8, redo=False):
         """
         Plot a bar chart of suprathreshold voxel counts as a standalone figure.
 
         Parameters
         ----------
-        csv_pair : list
-            List of two CSV filenames 
+        csv_files : list
+            List of CSV filenames 
         output_fname : str, optional
             Path to save the figure. If None, figure is returned without saving.
         colors : list, optional
@@ -621,7 +633,7 @@ class Figures_main:
         """
 
         if not os.path.exists(output_fname) or redo:
-            if csv_pair is None:
+            if csv_files is None:
                 raise ValueError("Please provide a list of two CSV filenames.")
         
             if colors is None:
@@ -629,7 +641,7 @@ class Figures_main:
             if maps_name is None:
                 maps_name = ["shimBase", "shimSlice"]
 
-            values_list = [pd.read_csv(f)["voxels_values"].values for f in csv_pair]
+            values_list = [pd.read_csv(f)["voxels_values"].values for f in csv_files]
             # --- Plot ---
             fig, ax = plt.subplots(figsize=figsize)
 
@@ -640,9 +652,10 @@ class Figures_main:
                 ax.hist(values_clean, bins=bins, color=colors[i], alpha=alpha,
                         label=maps_name[i], density=False)
 
-            ax.set_xlabel("t-value", fontsize=12, fontweight='bold', fontname="Arial")
-            ax.set_ylabel("# significant voxels", fontsize=12, fontweight='bold', fontname="Arial")
+            ax.set_xlabel("t-value", fontsize=10, fontweight='bold', fontname="Arial")
+            ax.set_ylabel("# significant voxels", fontsize=10, fontweight='bold', fontname="Arial")
             ax.tick_params(axis='both', labelsize=7)
+            ax.set_xlim(xmin, xmax)
 
             # Get current handles and labels
             handles, labels = ax.get_legend_handles_labels()
@@ -652,11 +665,12 @@ class Figures_main:
                 labels = ["shimBase", "shimSlice"]
                 ax.legend(handles, labels, fontsize=8.5, frameon=False, loc='upper right')
             else:
-                ax.legend(fontsize=8.5, frameon=False, loc='upper right')
+                ax.legend(handles[::-1],labels[::-1],frameon=False, loc='upper right',#bbox_to_anchor=(1, 1.0),
+                          prop={"family": "Arial", "size": 8.5})
 
             ax.spines['top'].set_visible(False)
             ax.spines['right'].set_visible(False)
-
+            
             plt.tight_layout()
 
             plt.savefig(output_fname,transparent=True, dpi=600)
@@ -876,129 +890,126 @@ class Figures_main:
         
         return output_fname
 
-        
     def combine_plots(self, output_fname, map_files, graph_files=None,
                   axial_files=None,
-                  map_titles=None, axial_titles=None, graph_titles=None,
+                  map_titles=None, graph_titles=None,
                   label_idx=True,
-                  figsize=(3.5, 3.5), graph_width_scale=1.0, graph_height_scale=1.0,
-                  graph_col_scale=0.6, axial_col_scale=1.1, redo=False):
+                  figsize=(3.5, 3.5), graph_width_scale=0.7, graph_height_scale=1.1,
+                  map_col_scale=0.15, graph_col_scale=0.8,
+                  axial_width_scale=0.5, col_wspace=0.05, redo=False):
 
         n_maps = len(map_files)
         n_graphs = len(graph_files) if graph_files else 0
         n_axial = len(axial_files) if axial_files else 0
 
-        assert n_maps in (1, 2), f"Expected 1 or 2 map_files, got {n_maps}"
         assert n_graphs in (0, 2, 4), f"Expected 0, 2 or 4 graph_files, got {n_graphs}"
         if axial_files:
-            assert n_axial in (1, 2), f"Expected 1 or 2 axial_files, got {n_axial}"
+            assert n_axial == n_maps, \
+                f"Expected one axial file per map file ({n_maps}), got {n_axial}"
 
         if not os.path.exists(output_fname) or redo:
             n_graph_cols = n_graphs // 2 if n_graphs > 0 else 0
-            n_axial_cols = n_axial if axial_files else 0
             n_rows = 2
 
-            # Read image sizes
-            map_img = mpimg.imread(map_files[0])
-            map_h, map_w = map_img.shape[:2]
-            map_col_width = figsize[1] * (map_w / map_h)
+            # --- Image aspect ratios (height / width) ---
+            cor_img = mpimg.imread(map_files[0])
+            cor_h, cor_w = cor_img.shape[:2]
+            cor_ratio =  (cor_h / cor_w)
 
+            if axial_files:
+                ax_img = mpimg.imread(axial_files[0])
+                ax_h, ax_w = ax_img.shape[:2]
+                axial_ratio =  (ax_h / ax_w)
+                stack_ratio = cor_ratio + axial_ratio      # coronal + axial stacked
+                map_height_ratios = [cor_ratio, axial_ratio]
+            else:
+                stack_ratio = cor_ratio
+                map_height_ratios = None
+
+            # Width of one map column when it spans the full figure height
+            map_col_width = figsize[1] / stack_ratio
             graph_cell_height = figsize[1] / n_rows
+
+            # --- Width ratios ---
+            map_widths = [map_col_scale] * n_maps
 
             if graph_files:
                 graph_img = mpimg.imread(graph_files[0])
                 graph_h, graph_w = graph_img.shape[:2]
-                graph_col_width = graph_cell_height * (graph_w / graph_h)
+                graph_col_width = graph_cell_height * (graph_w / graph_h) *0.3
                 graph_widths = [(graph_col_width / map_col_width) * graph_col_scale] * n_graph_cols
+                if n_graph_cols > 1:
+                    graph_widths[-1] *= 0.6  # last graph column 40% narrower
             else:
                 graph_widths = []
 
-            # Width ratios
-            map_widths = [0.6] * n_maps
+            width_ratios = map_widths + graph_widths
 
-            axial_widths = []
-            if axial_files:
-                axial_img = mpimg.imread(axial_files[0])
-                axial_h, axial_w = axial_img.shape[:2]
-                axial_col_width = graph_cell_height * (axial_w / axial_h)
-                axial_widths = [(axial_col_width / map_col_width) * axial_col_scale] * n_axial_cols
-
-            if graph_files:
-                graph_widths = [(graph_col_width / map_col_width) * graph_col_scale] * n_graph_cols
-            else:
-                graph_widths = []
-            width_ratios = map_widths + axial_widths + graph_widths
-
-            total_width = sum(map_widths) + sum(axial_widths) + sum(graph_widths)
-
-            new_figwidth = min(figsize[1] * (map_col_width * sum(width_ratios) / sum(map_widths)), figsize[0])
+            new_figwidth = min(
+                figsize[1] * (map_col_width * sum(width_ratios) / sum(map_widths)),
+                figsize[0]
+            )
             fig = plt.figure(figsize=(new_figwidth, figsize[1]))
 
-            n_cols = n_maps + n_axial_cols + n_graph_cols
+            n_cols = n_maps + n_graph_cols
             gs = fig.add_gridspec(n_rows, n_cols,
                                 width_ratios=width_ratios,
-                                hspace=0.05, wspace=0.05)
+                                hspace=0, wspace=col_wspace)
 
             label_y = 0.98
+            # Fixed: `0 if label_idx else None` made label_idx falsy (0) so labels never drew
             label_idx = 0 if label_idx else None
 
-            # --- Map columns: span both rows ---
-            
-            for i, fname in enumerate(map_files):
-                ax = fig.add_subplot(gs[:, i])
+            def add_label(ax):
+                nonlocal label_idx
+                if label_idx is not None:
+                    ax.text(0.0, 1.0, f"{chr(65 + label_idx)}.",
+                            ha='left', va='bottom',
+                            fontsize=8, fontweight='bold', fontname="Arial",
+                            transform=ax.transAxes, clip_on=False)
+                    label_idx += 1
+
+            def show_img(ax, fname):
                 img = mpimg.imread(fname)
                 h, w = img.shape[:2]
                 ax.imshow(img, aspect='auto')
                 ax.set_xlim(0, w)
                 ax.set_ylim(h, 0)
                 ax.axis('off')
-                
-                if label_idx:
-                    ax.text(0.0, 1.0, f"{chr(65 + label_idx)}.",
-                    ha='left', va='bottom',
-                    fontsize=8, fontweight='bold', fontname="Arial",
-                    transform=ax.transAxes, clip_on=False)
-                    label_idx += 1
-                if map_titles and i < len(map_titles):
-                    ax.text(0.5, label_y, map_titles[i],
-                            ha='center', va='bottom',
-                            fontsize=12, fontweight='bold', fontname="Arial",
-                            transform=ax.transAxes, clip_on=False)
 
-            # --- Axial columns: span both rows ---
-            if axial_files:
-                for i, fname in enumerate(axial_files):
-                    col = n_maps + i
-                    ax = fig.add_subplot(gs[:, col])
-                    img = mpimg.imread(fname)
-                    h, w = img.shape[:2]
-                    ax.imshow(img, aspect='auto')
-                    ax.set_xlim(0, w)
-                    ax.set_ylim(h, 0)
-                    ax.axis('off')
-                    if label_idx:
-                        ax.text(0.0, 1.0, f"{chr(65 + label_idx)}.",
-                            ha='left', va='bottom',
-                            fontsize=8, fontweight='bold', fontname="Arial",
-                            transform=ax.transAxes, clip_on=False)
-                        label_idx += 1
-                    if axial_titles and i < len(axial_titles):
-                        ax.text(0.5, 1.0, axial_titles[i],
+            # --- Map columns: coronal on top, axial below ---
+            for i, fname in enumerate(map_files):
+                if axial_files:
+                    sub = gs[:, i].subgridspec(2, 1,
+                                            height_ratios=map_height_ratios,
+                                            hspace=0.02)
+                    ax_cor = fig.add_subplot(sub[0])
+                    ax_axi = fig.add_subplot(sub[1])
+                    show_img(ax_axi, axial_files[i])
+                else:
+                    ax_cor = fig.add_subplot(gs[:, i])
+
+                show_img(ax_cor, fname)
+
+                add_label(ax_cor)
+                if map_titles and i < len(map_titles):
+                    ax_cor.text(0.5, label_y, map_titles[i],
                                 ha='center', va='bottom',
                                 fontsize=12, fontweight='bold', fontname="Arial",
-                                transform=ax.transAxes, clip_on=False)
+                                transform=ax_cor.transAxes, clip_on=False)
 
             # --- Graph columns: 2-row grid ---
             if graph_files:
                 for i, fname in enumerate(graph_files):
                     row = i // n_graph_cols
-                    col = n_maps + n_axial_cols + (i % n_graph_cols)
+                    col = n_maps + (i % n_graph_cols)
                     ax = fig.add_subplot(gs[row, col])
                     img = mpimg.imread(fname)
 
                     margin_x = (1 - graph_width_scale) / 2
                     margin_y = (1 - graph_height_scale) / 2
-                    ax_inner = ax.inset_axes([margin_x, margin_y, graph_width_scale, graph_height_scale])
+                    ax_inner = ax.inset_axes([margin_x, margin_y,
+                                            graph_width_scale, graph_height_scale])
                     ax_inner.imshow(img, aspect='auto')
                     ax_inner.axis('off')
                     ax.axis('off')
@@ -1006,16 +1017,14 @@ class Figures_main:
                     if graph_titles and i < len(graph_titles):
                         ax_inner.set_title(graph_titles[i], fontsize=7,
                                         fontweight='bold', fontname="Arial")
-                    
-                    if label_idx:
-                        ax.text(0.0, 1.0, f"{chr(65 + label_idx)}.",
-                            ha='left', va='bottom',
-                            fontsize=8, fontweight='bold', fontname="Arial",
-                            transform=ax.transAxes, clip_on=False)
-                        label_idx += 1
-
-            fig.subplots_adjust(wspace=0.05, hspace=0.05,
-                                left=0.01, right=0.99, top=0.93, bottom=0.01)
+                    add_label(ax)
+            
+            fig.subplots_adjust(wspace=col_wspace, hspace=0.1,
+                                left=0.01, right=1, top=0.93, bottom=0.01)
             plt.savefig(output_fname, dpi=600, transparent=True, bbox_inches='tight')
             plt.close()
+        
+        
+
+    
 

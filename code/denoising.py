@@ -614,9 +614,6 @@ class Denoising:
              raise Exception('mask_csf_file should be provided ex: mask_csf_file="path/to/csf/file.nii.gz"')
 
         # ---  Load files -----------------------------------------------------------
-        print("comcord")
-        print(func_file)
-        print(mask_seg_file)
         func_img = nib.load(func_file) # load the functional image
         mask_seg_img = nib.load(mask_seg_file) # load the seg mask image
         mask_csf_img = nib.load(mask_csf_file) # load the csf mask image
@@ -799,9 +796,6 @@ class Denoising:
         run_tag = "" if run_name=="" else "_" + run_name
 
         physio_dir = os.path.join(self.denoising_dir.format(ID), task_name, self.config["denoising"]["denoised_dir"].format(ID), structure, 'confounds')  # output directory
-
-        print("combine confounds")
-        print(func_file)
         
         if func_file is None:
             func_file = glob.glob(os.path.join(self.preproc_dir.format(ID), self.config["preprocess_dir"]["func_moco"].format(task_name), self.config["preprocess_f"]["func_moco"].format(ID,task_tag,run_tag)))[0]
@@ -840,7 +834,7 @@ class Denoising:
             slice_str = f"{slice_nb+1:03d}" if slice_wise else ""
             output_tag = f"_slice{slice_str}" if slice_wise else ""
             output_file = os.path.join(physio_dir, f"sub-{ID}_allconfounds{structure_tag}{task_tag}{run_tag}{output_tag}.txt")
-            print(output_file)
+
             if os.path.exists(output_file) and not redo:
                 continue
 

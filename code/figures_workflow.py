@@ -72,13 +72,13 @@ except Exception as e:
     print(f"WARNING: EPI comparison figure skipped: {e}", flush=True)
 
 # ------------------------------------------------------------------
-# 2. First-level maps (shimBase vs. shimSlice per participant)
+# 2. First-level maps (shimSlice3mm vs. shimSlice1mm per participant)
 # ------------------------------------------------------------------
 print("", flush=True)
 print("=== First-level maps ===", flush=True)
 fig_dir_first = os.path.join(config["raw_dir"], config["figures_dir"]["main_dir"], "first_level")
 os.makedirs(fig_dir_first, exist_ok=True)
-common_mask_fname = os.path.join(first_level_dir.format('glm', "").split("sub")[0], "common_mask_PAM50.nii.gz")
+common_mask_fname = os.path.join(path_code, "template",config["PAM50_cord_2ndlevel"])
 
 # Compare native 3mm vs. 1mm(smooth3mm) for a single shim condition (shimSlice), rather
 # than shimBase vs shimSlice at 3mm: shimBase MOTOR 1mm data only exists for sub-099, so
@@ -99,7 +99,7 @@ for ID in IDs:
             # the first (run-01) is used -- every subject then contributes the same 2 columns.
             matches = sorted(glob.glob(os.path.join(
                 first_level_dir.format("glm", ID), tag,
-                f"*{tag}*trial_RH-rest*inTemplate.nii.gz"
+                f"*{tag}*trial_RH-rest*z_inTemplate.nii.gz"
             )))
             if matches:
                 i_fnames_runs.append(matches[0])
@@ -113,7 +113,8 @@ try:
         output_fname=os.path.join(fig_dir_first, f"first_level_task_by_runs_n{len(i_fnames_by_runs)}.png"),
         background_fname=os.path.join(path_code, "template", config["PAM50_t2"]),
         mask_fname=common_mask_fname,
-        titles=["3mm", "1mm smoothed"],
+        titles=["3mm", "1mm z-smooth"],
+        stat_min=1.6, stat_max=4,
         task_name=tag,
         participant_ids=used_ids,
         n_cols=4,
@@ -169,12 +170,12 @@ ACQ_DISPLAY_NAMES = {
 print("", flush=True)
 print("=== GLM group maps ===", flush=True)
 try:
-    glm_plot = {}; glm_axial_plot = {}; bar_plot = {}; dist_plot = {}
-    for cluster_corr in [0.01, 0.001]:
-        glm_plot[cluster_corr] = {}; glm_axial_plot[cluster_corr] = {}
+    glm_plot = {}; glm_axial_plot = {};glm_axial_mip_plot={}; bar_plot = {}; dist_plot = {}
+    for cluster_corr in [0.01,0.05]:
+        glm_plot[cluster_corr] = {}; glm_axial_plot[cluster_corr] = {};glm_axial_mip_plot[cluster_corr] = {}
         bar_plot[cluster_corr] = {}; dist_plot[cluster_corr] = {}
-        z_slices = [280, 266, 256, 243, 225]
-        for vox_thr in [0.005]:
+        z_slices = [314, 263, 256, 236, 128]
+        for vox_thr in [0.05]:
             i_fnames_glm = []
             acq_names_glm = []
             metrics_csvs = []
@@ -189,7 +190,7 @@ try:
             ))
             glm_dir = glm_dir_cands[0] if glm_dir_cands else None
             if glm_dir is not None:
-                for acq_name in config["design_exp"]["acq_names"]:
+                for acq_name in ["shimSlice+3mm","shimSlice+1mm+sms2","shimSlice+1mm+sms2+smooth3mm"]:
                     tag = "task-motor_acq-" + acq_name
                     nii_cands = glob.glob(os.path.join(glm_dir, tag, f"*_{tag}_t_clustercorrected.nii.gz"))
                     if not nii_cands:
@@ -198,38 +199,36 @@ try:
                     i_fnames_glm.append(nii_path)
                     acq_names_glm.append(acq_name)
                     base = nii_path.split(".nii.gz")[0]
-                    if os.path.exists(base + "_metrics.csv"):
-                        metrics_csvs.append(base + "_metrics.csv")
-                    if os.path.exists(base + "_values.csv"):
-                        values_csvs.append(base + "_values.csv")
+                    metrics_csvs.append(base + "_metrics.csv")
+                    values_csvs.append(base + "_values.csv")
 
             if not i_fnames_glm:
                 print(f"INFO: No GLM maps for cluster={cluster_corr} vox={vox_thr}, skipping.", flush=True)
                 continue
 
-            titles_glm = [ACQ_DISPLAY_NAMES.get(a, a) for a in acq_names_glm]
+            titles_glm = ["3mm\n", "1mm\n", "1mm\nz-smooth"]  # hardcoded for now, since only shimSlice is used in the GLM
 
             glm_plot[cluster_corr][vox_thr] = figures.plot_fmri_maps(
                 i_fnames=i_fnames_glm,
                 output_fname=os.path.join(output_fig, f"n{len(IDs)}_glm_{cluster_corr}_vox{vox_thr}_avg_map.png"),
-                stat_min=3, stat_max=6, cbar_label='t-value',
+                stat_min=1.6, stat_max=6, cbar_label='t-value',
                 titles=titles_glm,
                 background_fname=os.path.join(path_code, "template", config["PAM50_t2"]),
                 underlay_fname=os.path.join(path_code, "template", config["PAM50_gm"]), redo=redo)
 
             glm_axial_plot[cluster_corr][vox_thr] = figures.plot_fmri_maps_axial(
-                i_fnames=i_fnames_glm,
+                i_fnames=[i_fnames_glm[0], i_fnames_glm[2]],
                 output_fname=os.path.join(output_fig, f"n{len(IDs)}_glm_axial_{cluster_corr}_vox{vox_thr}_avg_map.png"),
-                stat_min=3, stat_max=6, cbar_label='t-value',
+                stat_min=1.6, stat_max=6, cbar_label='t-value',
                 titles=titles_glm,
                 background_fname=os.path.join(path_code, "template", config["PAM50_t2"]),
                 underlay_fname=os.path.join(path_code, "template", config["PAM50_gm"]),
                 z_slices=z_slices, n_slices=len(z_slices), redo=redo)
 
-            figures.plot_fmri_maps_axial(
+            glm_axial_mip_plot[cluster_corr][vox_thr] =figures.plot_fmri_maps_axial(
                 i_fnames=i_fnames_glm,
                 output_fname=os.path.join(output_fig, f"n{len(IDs)}_glm_axial_mip_{cluster_corr}_vox{vox_thr}_avg_map.png"),
-                stat_min=3, stat_max=6, cbar_label='t-value',
+                stat_min=1.6, stat_max=6, cbar_label='t-value',
                 titles=titles_glm,
                 background_fname=os.path.join(path_code, "template", config["PAM50_t2"]),
                 underlay_fname=os.path.join(path_code, "template", config["PAM50_gm"]),
@@ -237,15 +236,17 @@ try:
 
             if metrics_csvs:
                 bar_plot[cluster_corr][vox_thr] = figures.bar_plot(
-                    csv_pair=metrics_csvs, figsize=(2, 2.7),
+                    csv_files=metrics_csvs, figsize=(2, 2.7),
+                    maps_name = titles_glm,
+                    colors=["#ADA8A8","#F098A4","#ED263F"],
                     output_fname=os.path.join(output_fig, f"n{len(IDs)}_glm_cluster{cluster_corr}_vox{vox_thr}_nb_vox.png"),
                     redo=redo)
 
             if len(values_csvs) >= 2:
                 dist_plot[cluster_corr][vox_thr] = figures.plot_dist(
-                    csv_pair=[values_csvs[1], values_csvs[0]],
-                    maps_name=["shimSlice", "shimBase"],
-                    colors=["#ED263F", "#ADA8A8"], figsize=(2, 2.7),
+                    csv_files=[values_csvs[2],values_csvs[1], values_csvs[0]],
+                    maps_name=["1mm \nz-smooth","1mm", "3mm"],
+                    colors=["#ED263F","#E5ACB3", "#ADA8A8"], figsize=(2, 2.7),
                     output_fname=os.path.join(output_fig, f"n{len(IDs)}_glm_cluster{cluster_corr}_vox{vox_thr}_distr.png"),
                     redo=redo)
 
@@ -253,12 +254,12 @@ try:
                 figures.combine_plots(
                     output_fname=os.path.join(output_fig, f"n{len(IDs)}_combined_task_cluster_{cluster_corr}_vox_{vox_thr}_plots.png"),
                     map_files=[glm_plot[cluster_corr][vox_thr]],
-                    axial_files=[glm_axial_plot[cluster_corr][vox_thr]],
+                    axial_files=[glm_axial_mip_plot[cluster_corr][vox_thr]],
                     graph_files=[
                         bar_plot[cluster_corr].get(vox_thr),
                         dist_plot.get(cluster_corr, {}).get(vox_thr)
                     ],
-                    label_idx=True, figsize=(5, 3.8), redo=True)
+                    label_idx=True, figsize=(5, 3.8), redo=redo)
 except Exception as e:
     print(f"WARNING: GLM group maps failed: {e}", flush=True)
 
@@ -287,14 +288,19 @@ try:
     acq_names_unc = []
     if raw_perm_dir is not None:
         for acq_name in config["design_exp"]["acq_names"]:
+            if acq_name == "shimSlice+1mm+sms2":
+                acq_name = "shimSlice+1mm+sms2+smooth3mm" 
+
             tag_unc = "task-motor_acq-" + acq_name
             nii_cands_unc = glob.glob(os.path.join(raw_perm_dir, tag_unc, f"*_{tag_unc}_t.nii.gz"))
+            
             if nii_cands_unc:
                 i_fnames_unc.append(nii_cands_unc[0])
                 acq_names_unc.append(acq_name)
+   
     if i_fnames_unc:
         titles_unc = [ACQ_DISPLAY_NAMES.get(a, a) for a in acq_names_unc]
-        z_slices_unc = [280, 266, 256, 243, 225]
+        z_slices_unc = [285, 263, 256, 235, 192]
         figures.plot_fmri_maps(
             i_fnames=i_fnames_unc,
             output_fname=os.path.join(output_fig, f"n{len(IDs)}_glm_uncorr_vox{vox_thr_unc}_avg_map.png"),
@@ -324,45 +330,7 @@ except Exception as e:
     print(f"WARNING: GLM uncorrected group maps failed: {e}", flush=True)
 
 # ------------------------------------------------------------------
-# 6. ICC maps
-# ------------------------------------------------------------------
-print("", flush=True)
-print("=== ICC maps ===", flush=True)
-icc_base_dir = second_level_dir.format("icc")
-z_slices_icc = [324, 306, 268, 238, 222, 204]
-for icc_label, subdir in [
-    ("run-01_vs_run-02",    "shimSlice_run01_vs_run02"),
-    ("shimBase_vs_shimSlice", "shimBase_vs_shimSlice"),
-]:
-    icc_nii = os.path.join(icc_base_dir, subdir, "group_voxelwise_ICC.nii.gz")
-    if not os.path.exists(icc_nii):
-        print(f"INFO: No ICC map at {icc_nii}, skipping.", flush=True)
-        continue
-    try:
-        icc_plot = figures.plot_fmri_maps(
-            i_fnames=[icc_nii],
-            output_fname=os.path.join(output_fig, f"n{len(IDs)}_icc_{icc_label}.png"),
-            titles=[""], cmap="rainbow", cbar_label='ICC',
-            stat_min=0.3, stat_max=0.9,
-            background_fname=os.path.join(path_code, "template", config["PAM50_t2"]),
-            redo=redo)
-        icc_axial_plot = figures.plot_fmri_maps_axial(
-            i_fnames=[icc_nii],
-            output_fname=os.path.join(output_fig, f"n{len(IDs)}_icc_{icc_label}_axial.png"),
-            cmap="rainbow", stat_min=0.3, stat_max=0.9, titles=[""],
-            background_fname=os.path.join(path_code, "template", config["PAM50_t2"]),
-            underlay_fname=os.path.join(path_code, "template", config["PAM50_gm"]),
-            z_slices=z_slices_icc, n_slices=len(z_slices_icc), redo=redo)
-        figures.combine_plots(
-            output_fname=os.path.join(output_fig, f"n{len(IDs)}_combined_icc_{icc_label}_plots.png"),
-            map_files=[icc_plot], label_idx=False, axial_files=[icc_axial_plot],
-            figsize=(2, 4), redo=redo)
-    except Exception as e:
-        print(f"WARNING: ICC {icc_label} figure failed: {e}", flush=True)
-
-
-# ------------------------------------------------------------------
-# 7. metrics extraction + comparison figures
+# 6. metrics extraction + comparison figures
 # ------------------------------------------------------------------
 print("", flush=True)
 print("=== metrics extraction + comparison figures ===", flush=True)
@@ -383,10 +351,10 @@ SHIM_TRIPLETS = [
     ("shimSlice+3mm", "shimSlice+1mm+sms2", "shimSlice+1mm+sms2+smooth3mm", "shimSlice"),
 ]
 # Same convention as SNRPLOT_4COND below: 3mm blueish, 1mm reddish (shimSlice shades).
-COLORS_3  = ["#74ADD1", "#F4A582", "#D73027"]
+COLORS_3  = ["#ADA8A8", "#F098A4", "#ED263F"]
 XLABELS_3 = {
     "shimSlice+1mm+sms2":           "1mm\n(native)",
-    "shimSlice+1mm+sms2+smooth3mm": "1mm\n(smooth3mm)",
+    "shimSlice+1mm+sms2+smooth3mm": "1mm\n(z-smooth)",
     "shimSlice+3mm":                "3mm",
 }
 # One-sided p=0.01 threshold, same convention as T_THRESH_UNC for the group map (#87).
@@ -741,10 +709,10 @@ if not bold_df.empty:
 
 # --- 7f. MI 4-condition figure ---
 MI_4COND = [
-    ("shimBase+3mm",               "rest", 0,    "#2166AC", "shimBase\n3mm"),
-    ("shimSlice+3mm",              "rest", 1,    "#74ADD1", "shimSlice\n3mm"),
-    ("shimBase+1mm+sms2+avg3mm",   "rest", 2.5,  "#D73027", "shimBase\n1mm\n(avg3mm)"),
-    ("shimSlice+1mm+sms2+avg3mm",  "rest", 3.5,  "#F4A582", "shimSlice\n1mm\n(avg3mm)"),
+    ("shimBase+3mm",               "rest", 0,    "#ADA8A8", "shimBase\n3mm"),
+    ("shimSlice+3mm",              "rest", 1,    "#3A3838", "shimSlice\n3mm"),
+    ("shimBase+1mm+sms2+avg3mm",   "rest", 2.5,  "#F098A4", "shimBase\n1mm\n(avg3mm)"),
+    ("shimSlice+1mm+sms2+avg3mm",  "rest", 3.5,  "#ED263F", "shimSlice\n1mm\n(avg3mm)"),
 ]
 fig_path_4 = os.path.join(output_fig_preprocessing, "mi_t2star_4cond.png")
 if not mi_df.empty and (not os.path.exists(fig_path_4) or redo):
@@ -798,11 +766,11 @@ if not mi_df.empty and (not os.path.exists(fig_path_4) or redo):
 
 # --- 7g. tSNR / sSNR 4-condition figures (matching MI style) ---
 SNRPLOT_4COND = [
-    ("shimBase+3mm",                  "rest", 0,    "#2166AC", "shimBase\n3mm"),
-    ("shimSlice+3mm",                 "rest", 1,    "#74ADD1", "shimSlice\n3mm"),
-    ("shimBase+1mm+sms2+smooth3mm",   "rest", 2.5,  "#D73027", "shimBase\n1mm\n(smooth3mm)"),
-    ("shimSlice+1mm+sms2+smooth3mm",  "rest", 3.5,  "#F4A582", "shimSlice\n1mm\n(smooth3mm)"),
-]
+    ("shimBase+3mm",                  "rest", 0,    "#ADA8A8", "shimBase\n3mm"),
+    ("shimSlice+3mm",                 "rest", 1,    "#3A3838", "shimSlice\n3mm"),
+    ("shimBase+1mm+sms2+smooth3mm",   "rest", 2.5,  "#F098A4", "shimBase\n1mm\n(z-smooth)"),
+    ("shimSlice+1mm+sms2+smooth3mm",  "rest", 3.5,  "#ED263F", "shimSlice\n1mm\n(z-smooth)"),
+]    
 for snr_metric, col_name, ylabel in [
     ("tSNR", "tsnr_sc", "Mean tSNR within SC mask"),
     ("sSNR", "ssnr_sc", "Mean sSNR within SC mask"),

@@ -167,20 +167,25 @@ class GLM_main:
                 print(f"First-level results already exist for sub-{ID} {task_name} {run_name}. Skipping computation.")
         
         # --- Compute contrasts and save -----------------------------------------------------------
-        stat_maps=[]
+        stat_maps=[];beta_maps=[]
 
         for i, contrast in enumerate(contrasts):
             if smoothing_fwhm is not None:
                 tag="_s"
             else:
                 tag=""
-            stat_maps.append(os.path.join(first_level_dir, f"sub-{ID}_{task_name}{run_tag}_{contrast}{tag}.nii.gz"))
+            stat_maps.append(os.path.join(first_level_dir, f"sub-{ID}_{task_name}{run_tag}_{contrast}{tag}_z.nii.gz"))
+            beta_maps.append(os.path.join(first_level_dir, f"sub-{ID}_{task_name}{run_tag}_{contrast}{tag}_beta.nii.gz"))
             
             if not os.path.exists(stat_maps[i]) or redo:
-                results = fmri_glm.compute_contrast(contrast, output_type="stat")
-                results.to_filename(stat_maps[i])
+                t_results = fmri_glm.compute_contrast(contrast) # by default it going to be the z-score
+                t_results.to_filename(stat_maps[i])
+
+            if not os.path.exists(beta_maps[i]) or redo:
+                beta_results = fmri_glm.compute_contrast(contrast, output_type="effect_size")
+                beta_results.to_filename(beta_maps[i])
         
-        return stat_maps
+        return stat_maps, beta_maps
 
     def run_icc(self, IDs=None, i_fnames=None, o_dir=None, mask_file=None, threshold=0, fwhm=[1,1,1],redo=False):
         
