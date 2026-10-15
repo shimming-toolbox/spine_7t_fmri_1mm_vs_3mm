@@ -180,9 +180,9 @@ for ID_nb,ID in enumerate(IDs):
                     redo=redo)
 
                 #------------------------------------------------------------------
-                #------ Step 3: Apply 2x slices mm smoothing 
+                #------ Step 3: Apply smoothing 
                 #------------------------------------------------------------------
-                #------ smooth the 1mm data to 3mm across slices
+                #------ z-smooth the 1mm data to 3mm across slices (boxcar smoothing)
                 if acq_name == "shimSlice+1mm+sms2":
                     new_acq_tag="shimSlice+1mm+sms2+smooth3mm"
 
@@ -198,9 +198,8 @@ for ID_nb,ID in enumerate(IDs):
                                             redo=redo, 
                                             verbose=verbose)
 
-                #------------------------------------------------------------------
-                #------ Apply smoothing
-                #------------------------------------------------------------------
+                
+                #------ Apply smoothing anisotropic smoothing (gaussian kernel with FWHM of 1.5mm in-plane and 3mm across slices)
                 fwhm=[1.5,1.5,3]
                 if acq_name == "shimSlice+1mm+sms2":
                     smooth_imag_files=[Clean_image_file.split(".")[0] + "_s.nii.gz",Clean_image_file_3mmzsmooth.split(".")[0]+ "_s.nii.gz"]
