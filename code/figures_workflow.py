@@ -342,7 +342,7 @@ preprocessing_dir_compare = os.path.join(path_data, config["preprocess_dir"]["ma
 os.makedirs(out_dir, exist_ok=True)
 
 REGULAR_ACQS = config["design_exp"]["acq_names"]
-SMOOTH_ACQS  = [k for k in config.get("derived_acq", {}) if "z-smooth" in k]
+SMOOTH_ACQS  = [k for k in config.get("derived_acq", {}) if "smooth3mm" in k]
 AVG_ACQS     = [k for k in config.get("derived_acq", {}) if "avg3mm"    in k]
 DERIVED_ACQS = SMOOTH_ACQS + AVG_ACQS
 ALL_ACQS     = REGULAR_ACQS + DERIVED_ACQS
