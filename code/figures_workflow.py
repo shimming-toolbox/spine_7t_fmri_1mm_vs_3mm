@@ -455,7 +455,8 @@ if not os.path.exists(tsnr_csv) or redo:
         for task in ["rest"]:
             for acq_name in ALL_ACQS:
                 tag = f"task-{task}_acq-{acq_name}"
-                if acq_name in DERIVED_ACQS:
+                # +avg3mm tSNR is already written to tsnr/ by preprocessing (generate_tsnr_maps_derived)
+                if acq_name in SMOOTH_ACQS:
                     tsnr_map = _get_tsnr_for_derived(ID, task, acq_name)
                 else:
                     cands = glob.glob(os.path.join(preprocessing_dir_compare.format(ID), "func", tag, "tsnr",
@@ -768,8 +769,8 @@ if not mi_df.empty and (not os.path.exists(fig_path_4) or redo):
 SNRPLOT_4COND = [
     ("shimBase+3mm",                  "rest", 0,    "#ADA8A8", "shimBase\n3mm"),
     ("shimSlice+3mm",                 "rest", 1,    "#3A3838", "shimSlice\n3mm"),
-    ("shimBase+1mm+sms2+smooth3mm",   "rest", 2.5,  "#F098A4", "shimBase\n1mm\n(z-smooth)"),
-    ("shimSlice+1mm+sms2+smooth3mm",  "rest", 3.5,  "#ED263F", "shimSlice\n1mm\n(z-smooth)"),
+    ("shimBase+1mm+sms2+avg3mm",      "rest", 2.5,  "#F098A4", "shimBase\n1mm\n(avg3mm)"),
+    ("shimSlice+1mm+sms2+avg3mm",     "rest", 3.5,  "#ED263F", "shimSlice\n1mm\n(avg3mm)"),
 ]    
 for snr_metric, col_name, ylabel in [
     ("tSNR", "tsnr_sc", "Mean tSNR within SC mask"),
