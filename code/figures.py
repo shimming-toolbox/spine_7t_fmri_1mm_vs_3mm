@@ -51,13 +51,14 @@ class Figures_main:
             output_fname = os.path.join(self.first_level_dir.split("sub-")[0], f"first_level_maps_n{len(i_fnames)}_all.png")
         if i_fnames is None or len(i_fnames) == 0:
             raise ValueError("i_fnames_pair is empty")
+        n_comp = len(i_fnames[0])
 
         if not os.path.exists(output_fname) or redo:
             n_subjects = len(i_fnames)
             n_participant_rows = (n_subjects + n_cols - 1) // n_cols  # number of participant rows
             n_rows = n_participant_rows * 3  # coronal, axial, gap
             n_actual_cols = min(n_subjects, n_cols)
-            total_cols = (n_cols * 3) - 1  # 2 maps + 1 spacer per participant except for the last one
+            total_cols = (n_cols * (n_comp + 1)) - 1  # 2 maps + 1 spacer per participant except for the last one
 
             # --- Load template, mask, and underlay ---
             template_img = nib.as_closest_canonical(nib.load(background_fname))
@@ -94,11 +95,11 @@ class Figures_main:
 
             width_ratios = []
             for i in range(n_cols):
-                width_ratios += [1, 1]  # two map columns
+                width_ratios += [1,] * n_comp  # n_comp map columns
                 if i != n_cols - 1:     # add spacer except after last participant
                     width_ratios += [spacer_ratio]
 
-            col_width_units = n_cols * 2 + (n_cols - 1) * spacer_ratio
+            col_width_units = n_cols * n_comp + (n_cols - 1) * spacer_ratio
             row_height_units = n_participant_rows * (coronal_aspect + axial_aspect + gap_ratio)
             # Require (height of 1 row-unit) == (width of 1 column-unit), in inches.
             fig_height = fig_width * (right - left) / col_width_units * row_height_units / (top - bottom)
@@ -115,7 +116,7 @@ class Figures_main:
                 col_idx = subj_idx % n_cols
                 row_participant = subj_idx // n_cols
                 row_start = (subj_idx // n_cols) * 3
-                col_start = (subj_idx % n_cols) * 3   # 2 for maps, 1 for spacer
+                col_start = (subj_idx % n_cols) * (n_comp + 1 )   # 2 for maps, 1 for spacer
 
                 for map_idx, i_fname in enumerate(maps):
                     if i_fname is None:
@@ -176,8 +177,8 @@ class Figures_main:
                         # geometry (not a visual guess): midpoint between this axis's own
                         # left edge and the second map's right edge, expressed as a
                         # fraction of this axis's own width (transAxes).
-                        x_center = 1.001
-                        xmax_line = 2.001
+                        x_center = n_comp / 2
+                        xmax_line = n_comp
                         y_top = 1.1
                         if participant_ids is not None:
                             subj_label = participant_ids[subj_idx]
@@ -186,10 +187,11 @@ class Figures_main:
                         ax_cor.text(x_center, y_top, f"sub-{subj_label}", ha='center', va='bottom', fontsize=8, fontweight='black', transform=ax_cor.transAxes, fontname="Arial")
                         line_y = 1.08
                         ax_cor.hlines(y=line_y, xmin=0, xmax=xmax_line, colors='black', linewidth=0.8, transform=ax_cor.transAxes, clip_on=False)
-
-                        ax_cor.set_title(titles[0], color="black",  fontsize=6, fontname="Arial", y=0.99)
-                    if map_idx == 1:
-                        ax_cor.set_title(titles[1], color="black",  fontsize=6, fontname="Arial", y=0.99)
+                    if n_comp == 3:
+                        y_subtitle = 0.97
+                    else:
+                        y_subtitle = 0.99
+                    ax_cor.set_title(titles[map_idx], color="black", fontsize=6, fontname="Arial", y=y_subtitle)
 
                     # Orientation labels only for first participant
                     if subj_idx == 0 and map_idx == 0:

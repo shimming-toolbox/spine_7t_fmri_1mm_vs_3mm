@@ -72,10 +72,10 @@ except Exception as e:
     print(f"WARNING: EPI comparison figure skipped: {e}", flush=True)
 
 # ------------------------------------------------------------------
-# 2. First-level maps (shimSlice3mm vs. shimSlice1mm per participant)
+# 2 a. First-level maps (shimSlice3mm vs. shimSlice1mm+smooth3mm per participant)
 # ------------------------------------------------------------------
 print("", flush=True)
-print("=== First-level maps ===", flush=True)
+print("=== First-level maps (shimSlice3mm vs. shimSlice1mm+smooth3mm) ===", flush=True)
 fig_dir_first = os.path.join(config["raw_dir"], config["figures_dir"]["main_dir"], "first_level")
 os.makedirs(fig_dir_first, exist_ok=True)
 common_mask_fname = os.path.join(path_code, "template",config["PAM50_cord_2ndlevel"])
@@ -110,7 +110,7 @@ for ID in IDs:
 try:
     figures.plot_first_level_maps(
         i_fnames=i_fnames_by_runs,
-        output_fname=os.path.join(fig_dir_first, f"first_level_task_by_runs_n{len(i_fnames_by_runs)}.png"),
+        output_fname=os.path.join(fig_dir_first, f"first_level_task_by_runs_comp2_n{len(i_fnames_by_runs)}.png"),
         background_fname=os.path.join(path_code, "template", config["PAM50_t2"]),
         mask_fname=common_mask_fname,
         titles=["3mm", "1mm z-smooth"],
@@ -122,6 +122,53 @@ try:
         redo=redo)
 except Exception as e:
     print(f"WARNING: First-level maps skipped: {e}", flush=True)
+
+# ------------------------------------------------------------------
+# 2 b. First-level maps (shimSlice3mm vs. shimSlice1mm vs. shimSlice1mm+smooth3mm per participant)
+# ------------------------------------------------------------------
+# Compare native 3mm vs. native 1mm vs 1mm(smooth3mm)
+
+print("", flush=True)
+print("=== First-level maps (shimSlice3mm vs. shimSlice1mm vs. shimSlice1mm+smooth3mm) ===", flush=True)
+first_level_acqs = ["shimSlice+3mm", "shimSlice+1mm+sms2", "shimSlice+1mm+sms2+smooth3mm"]
+
+i_fnames_by_runs = []
+used_ids = []
+for ID in IDs:
+    i_fnames_runs = []
+    for task_name in config["design_exp"]["task_names"]:
+        for acq_name in first_level_acqs:
+            tag = "task-" + task_name + "_acq-" + acq_name
+            # Glob the GLM result directly (rather than checking for a matching raw BOLD
+            # file first): derived acquisitions like +smooth3mm have no raw BOLD of their
+            # own. Sorted so that, when a subject has multiple runs (e.g. sub-099), only
+            # the first (run-01) is used -- every subject then contributes the same 2 columns.
+            matches = sorted(glob.glob(os.path.join(
+                first_level_dir.format("glm", ID), tag,
+                f"*{tag}*trial_RH-rest*z_inTemplate.nii.gz"
+            )))
+            if matches:
+                i_fnames_runs.append(matches[0])
+    if i_fnames_runs:
+        i_fnames_by_runs.append(i_fnames_runs)
+        used_ids.append(ID)
+
+try:
+    figures.plot_first_level_maps(
+        i_fnames=i_fnames_by_runs,
+        output_fname=os.path.join(fig_dir_first, f"first_level_task_by_runs_comp3_n{len(i_fnames_by_runs)}.png"),
+        background_fname=os.path.join(path_code, "template", config["PAM50_t2"]),
+        mask_fname=common_mask_fname,
+        titles=["3mm", "1mm", "1mm z-smooth"],
+        stat_min=1.6, stat_max=4,
+        task_name=tag,
+        participant_ids=used_ids,
+        n_cols=4,
+        verbose=True,
+        redo=redo)
+except Exception as e:
+    print(f"WARNING: First-level maps skipped: {e}", flush=True)
+
 
 # ------------------------------------------------------------------
 # 3. tSNR / sSNR 4-condition plots  →  see section 7g (generated after metrics)
