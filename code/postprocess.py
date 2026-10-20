@@ -1209,7 +1209,7 @@ class EpiComparison:
                             axs[idx].spines['top'].set_edgecolor(color)
                             axs[idx].spines['bottom'].set_visible(False)
                             if subtitle:
-                                axs[idx].set_title(subtitle, fontsize=7, color=color, fontweight='bold', pad=2)
+                                axs[idx].set_title(subtitle, fontsize=10, color=color, fontweight='bold', pad=2)
                         elif idx == n_slices_total - 1:
                             axs[idx].spines['top'].set_visible(False)
                             axs[idx].spines['bottom'].set_edgecolor(color)

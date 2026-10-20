@@ -150,7 +150,7 @@ try:
             # preprocessing/data-quality comparison (native vs derived-resolution tSNR),
             # not a second-level statistical result -- see #82.
             output_fname=os.path.join(output_fig_preprocessing, f"n{len(IDs)}_tsnr_{shim_label}_3mm_vs_avg3mm_map.png"),
-            stat_min=5, stat_max=16, cmap='turbo', cbar_label='tSNR',
+            stat_min=5, stat_max=18, cmap='turbo', cbar_label='tSNR',
             titles=[f"{shim_label} 3mm", f"{shim_label} avg3mm"],
             background_fname=os.path.join(path_code, "template", config["PAM50_t2"]), redo=redo)
 except Exception as e:
