@@ -1057,11 +1057,11 @@ class EpiComparison:
             fig = plt.figure(figsize=(5.5 * n_part, n_max_panels))
             gs_main = gridspec.GridSpec(2, n_part * 6 - 1, figure=fig, hspace=0, wspace=0, width_ratios=width_ratios, height_ratios=[0.07, 1])
 
-            color_gre       = '#555555'   # dark gray for anatomy reference
-            color_baseline  = '#2166AC'   # dark blue  (shimBase 3mm)
-            color_slicewise = '#74ADD1'   # light blue (shimSlice 3mm)
-            color_base_avg  = '#D73027'   # dark red   (shimBase 1mm)
-            color_slice_avg = '#F4A582'   # light red  (shimSlice 1mm)
+            color_gre       = '#2166AC'   # dark gray for anatomy reference
+            color_baseline  = '#ADA8A8'   # light gray  (shimBase 3mm)
+            color_slicewise = '#3A3838'   # darker gray (shimSlice 3mm)
+            color_base_avg  = '#F098A4'   # light red   (shimBase 1mm)
+            color_slice_avg = '#ED263F'   # darker red  (shimSlice 1mm)
 
             pam50_cord_path = os.path.join(self.config["code_dir"], "template", self.config["PAM50_cord"])
             pam50_cord_data = nib.load(pam50_cord_path).get_fdata()
@@ -1209,7 +1209,7 @@ class EpiComparison:
                             axs[idx].spines['top'].set_edgecolor(color)
                             axs[idx].spines['bottom'].set_visible(False)
                             if subtitle:
-                                axs[idx].set_title(subtitle, fontsize=7, color=color, fontweight='bold', pad=2)
+                                axs[idx].set_title(subtitle, fontsize=10, color=color, fontweight='bold', pad=2)
                         elif idx == n_slices_total - 1:
                             axs[idx].spines['top'].set_visible(False)
                             axs[idx].spines['bottom'].set_edgecolor(color)
