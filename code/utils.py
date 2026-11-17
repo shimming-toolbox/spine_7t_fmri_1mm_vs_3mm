@@ -499,7 +499,7 @@ def tSNR(ID=None,i_img=None,o_dir=None,mask=None,warp_img=None,structure='spinal
     return o_txt, img_tSNR
 
 
-def compute_SNR(i_file, mask_file):
+def compute_SNR(i_file, mask_file, mask_noise_file=None, return_std=False):
     """
         This function calculate the SNR within the brain or spinal cord
         
@@ -529,12 +529,28 @@ def compute_SNR(i_file, mask_file):
     signal_in_mask = i_data[mask_data]
 
     # Compute sSNR
-    mean_signal = np.mean(signal_in_mask)
-    std_signal = np.std(signal_in_mask)
+    mean_signal = np.mean(signal_in_mask, axis=0)
 
-    sSNR = mean_signal / std_signal
+    if mask_noise_file is not None:
+        # Load noise mask
+        mask_noise_img = nib.load(mask_noise_file)
+        mask_noise_data = mask_noise_img.get_fdata().astype(bool)
+        # Apply noise mask
+        noise_in_mask = i_data[mask_noise_data]
+        # Compute standard deviation of noise
+        # Rayleigh correction factor sqrt(2 - (pi/2)) ≈ 0.6551
+        std_signal = np.std(noise_in_mask, axis=0) / 0.6551
+    else:
+        std_signal = np.std(signal_in_mask, axis=0)
 
-    return sSNR
+    # We take the mean here in case the input is 4D so we return the average ssnr across all volumes
+    ssnr = np.mean(mean_signal / std_signal)
+    std_signal = np.mean(std_signal)
+
+    if return_std:
+        return ssnr, std_signal
+
+    return ssnr
 
 
 def get_latest_dir(base_dir):

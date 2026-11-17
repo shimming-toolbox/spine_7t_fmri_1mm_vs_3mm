@@ -348,13 +348,13 @@ DERIVED_ACQS = SMOOTH_ACQS + AVG_ACQS
 ALL_ACQS     = REGULAR_ACQS + DERIVED_ACQS
 
 SHIM_TRIPLETS = [
-    ("shimSlice+3mm", "shimSlice+1mm+sms2", "shimSlice+1mm+sms2+smooth3mm", "shimSlice"),
+    ("shimSlice+3mm", "shimSlice+1mm+sms2", "shimSlice+1mm+sms2+avg3mm", "shimSlice"),
 ]
 # Same convention as SNRPLOT_4COND below: 3mm blueish, 1mm reddish (shimSlice shades).
 COLORS_3  = ["#ADA8A8", "#F098A4", "#ED263F"]
 XLABELS_3 = {
     "shimSlice+1mm+sms2":           "1mm\n(native)",
-    "shimSlice+1mm+sms2+smooth3mm": "1mm\n(z-smooth)",
+    "shimSlice+1mm+sms2+avg3mm": "1mm\n(avg3mm)",
     "shimSlice+3mm":                "3mm",
 }
 # One-sided p=0.01 threshold, same convention as T_THRESH_UNC for the group map (#87).
@@ -391,6 +391,127 @@ def _get_moco_mean(ID, task, acq_name):
     cands = (glob.glob(os.path.join(tag_dir, "sct_fmri_moco", f"sub-{ID}_{tag}*_bold_moco_mean.nii.gz")) or
              glob.glob(os.path.join(tag_dir, f"sub-{ID}_{tag}*_bold_moco_mean.nii.gz")))
     return sorted(cands)[-1] if cands else None
+
+
+def _get_moco(ID, task, acq_name):
+    tag = f"task-{task}_acq-{acq_name}"
+    tag_dir = os.path.join(preprocessing_dir_compare.format(ID), "func", tag)
+    cands = (glob.glob(os.path.join(tag_dir, "sct_fmri_moco", f"sub-{ID}_{tag}*_bold_moco.nii.gz")) or
+             glob.glob(os.path.join(tag_dir, f"sub-{ID}_{tag}*_bold_moco.nii.gz")))
+    return sorted(cands)[-1] if cands else None
+
+
+def _noise_region_shape(acq_name):
+    """Return the requested noise-mask size in voxel coordinates.
+    The number of voxels makes sure the same volume size is selected
+    """
+    return (10, 10, 12) if "1mm" in acq_name and "avg3mm" not in acq_name else (10, 10, 4)
+
+
+def _find_noise_region(data, region_shape):
+    """Find the lowest-intensity fully sampled block in a 3D mean image."""
+    if data.ndim != 3:
+        raise ValueError(f"Expected a 3D moco_mean image, got shape {data.shape}")
+
+    finite_positive = np.isfinite(data) & (data > 0)
+    if not finite_positive.any():
+        raise ValueError("moco_mean contains no finite positive voxels for noise-region selection")
+
+    sx, sy, sz = region_shape
+    if any(size > dimension for size, dimension in zip(region_shape, data.shape)):
+        raise ValueError(
+            f"Noise region {region_shape} does not fit moco_mean shape {data.shape}"
+        )
+
+    # Integral images make the exhaustive block search inexpensive while ensuring
+    # that zero-valued background voxels are never selected as noise.
+    values = np.where(finite_positive, data, 0.0)
+    valid = finite_positive.astype(np.int32)
+    values_integral = np.pad(values, 1).cumsum(0).cumsum(1).cumsum(2)
+    valid_integral = np.pad(valid, 1).cumsum(0).cumsum(1).cumsum(2)
+    required = int(np.ceil(0.95 * sx * sy * sz))
+    z_starts = np.arange(data.shape[2] - sz + 1)
+
+    best_mean = np.inf
+    best_start = None
+    for x in range(1, data.shape[0] - sx + 1):
+        x0, x1 = x, x + sx
+        for y in range(1, data.shape[1] - sy + 1):
+            y0, y1 = y, y + sy
+            block_sum = (
+                values_integral[x1, y1, z_starts + sz]
+                - values_integral[x0, y1, z_starts + sz]
+                - values_integral[x1, y0, z_starts + sz]
+                - values_integral[x1, y1, z_starts]
+                + values_integral[x0, y0, z_starts + sz]
+                + values_integral[x0, y1, z_starts]
+                + values_integral[x1, y0, z_starts]
+                - values_integral[x0, y0, z_starts]
+            )
+            block_valid = (
+                valid_integral[x1, y1, z_starts + sz]
+                - valid_integral[x0, y1, z_starts + sz]
+                - valid_integral[x1, y0, z_starts + sz]
+                - valid_integral[x1, y1, z_starts]
+                + valid_integral[x0, y0, z_starts + sz]
+                + valid_integral[x0, y1, z_starts]
+                + valid_integral[x1, y0, z_starts]
+                - valid_integral[x0, y0, z_starts]
+            )
+            means = np.divide(
+                block_sum, block_valid, out=np.full_like(block_sum, np.inf, dtype=float),
+                where=block_valid >= required,
+            )
+            z_index = int(np.argmin(means))
+            if means[z_index] < best_mean:
+                best_mean = means[z_index]
+                best_start = (x, y, int(z_starts[z_index]))
+
+    if best_start is None:
+        raise ValueError("Could not find a sufficiently sampled noise region in moco_mean")
+    return best_start
+
+
+def _plot_noise_distribution(values, output_file, ID, task, acq_name):
+    fig, ax = plt.subplots(figsize=(5, 4))
+    ax.hist(values, bins=50, color="#4472C4", alpha=0.85)
+    ax.set_xlabel("moco_mean intensity")
+    ax.set_ylabel("Voxel count")
+    ax.set_title(f"Noise distribution: sub-{ID}, {task}, {acq_name}")
+    fig.tight_layout()
+    fig.savefig(output_file, dpi=150)
+    plt.close(fig)
+
+
+def _get_noise_seg(ID, task, acq_name, redo):
+    path_noise_seg = os.path.join(output_fig_preprocessing, "noise_seg")
+    if not os.path.exists(path_noise_seg):
+        os.makedirs(path_noise_seg)
+    tag = f"task-{task}_acq-{acq_name}"
+    fname_noise_seg = os.path.join(path_noise_seg, f"sub-{ID}_{tag}_noise_seg.nii.gz")
+    fname_noise_hist = os.path.join(path_noise_seg, f"sub-{ID}_{tag}_noise_moco_mean_histogram.png")
+
+    if os.path.exists(fname_noise_seg) and os.path.exists(fname_noise_hist) and not redo:
+        return fname_noise_seg
+
+    fname_moco_mean = _get_moco_mean(ID, task, acq_name)
+    if not fname_moco_mean:
+        return None
+    nii_moco_mean = nib.load(fname_moco_mean)
+    data = nii_moco_mean.get_fdata(dtype=np.float32)
+    region_shape = _noise_region_shape(acq_name)
+    start = _find_noise_region(data, region_shape)
+
+    noise_seg = np.zeros(data.shape, dtype=np.uint8)
+    x, y, z = start
+    sx, sy, sz = region_shape
+    noise_seg[x:x + sx, y:y + sy, z:z + sz] = 1
+    noise_values = data[x:x + sx, y:y + sy, z:z + sz].ravel()
+
+    nii_noise_seg = nib.Nifti1Image(noise_seg, affine=nii_moco_mean.affine, header=nii_moco_mean.header)
+    nib.save(nii_noise_seg, fname_noise_seg)
+    _plot_noise_distribution(noise_values, fname_noise_hist, ID, task, acq_name)
+    return fname_noise_seg
 
 
 def wilcoxon_str(a, b):
@@ -477,8 +598,21 @@ if not os.path.exists(tsnr_csv) or redo:
                         ssnr_val = float(compute_SNR(moco_mean, seg_path))
                     except Exception:
                         pass
+                snr0_moco = None
+                snr0_moco_mean = None
+                std_moco = None
+                std_moco_mean = None
+                moco = _get_moco(ID, task, acq_name)
+                noise_seg_path = _get_noise_seg(ID, task, acq_name, redo=redo)
+                if moco and os.path.exists(moco) and noise_seg_path and os.path.exists(noise_seg_path):
+                    try:
+                        snr0_moco, std_moco = compute_SNR(moco, seg_path, noise_seg_path, return_std=True)
+                        snr0_moco_mean, std_moco_mean = compute_SNR(moco_mean, seg_path, noise_seg_path, return_std=True)
+                    except Exception:
+                        pass
+
                 records.append({"subject": ID, "task": task, "acq": acq_name,
-                                 "tsnr_sc": float(np.mean(vals)), "ssnr_sc": ssnr_val})
+                                 "tsnr_sc": float(np.mean(vals)), "ssnr_sc": ssnr_val, "snr0_moco": snr0_moco, "snr0_std_moco": std_moco, "snr0_moco_mean": snr0_moco_mean, "snr0_std_moco_mean": std_moco_mean})
     pd.DataFrame(records).to_csv(tsnr_csv, index=False)
     print(f"Saved: {tsnr_csv}", flush=True)
 
@@ -651,30 +785,32 @@ else:
     except pd.errors.EmptyDataError:
         mi_df = pd.DataFrame()
 
-# --- 7d. tSNR triplet figures ---
-for task in df_tsnr["task"].unique():
-    df_task = df_tsnr[df_tsnr["task"] == task]
-    for acq1, acq2, acq3, shim_label in SHIM_TRIPLETS:
-        fig_path = os.path.join(output_fig_preprocessing, f"tsnr_sc_{shim_label}_{task}_triplet.png")
-        if os.path.exists(fig_path) and not redo:
-            print(f"Figure already exists: {fig_path}", flush=True)
-            continue
-        d = {a: df_task[df_task["acq"] == a].set_index("subject")["tsnr_sc"] for a in [acq1, acq2, acq3]}
-        common_all = d[acq1].index.intersection(d[acq2].index).intersection(d[acq3].index)
-        common_23  = d[acq2].index.intersection(d[acq3].index)
-        if len(common_23) < 2:
-            print(f"WARNING: Only {len(common_23)} paired for tSNR {shim_label} task-{task}, skipping.", flush=True)
-            continue
-        _, _, pstr23 = wilcoxon_str(d[acq2].loc[common_23].values, d[acq3].loc[common_23].values)
-        try:
-            fig, ax = plt.subplots(figsize=(4, 4.5))
-            _triplet_fig(ax, d, [acq1, acq2, acq3], [0, 1, 2], common_all, common_23, pstr23,
-                         "Mean tSNR within SC mask",
-                         f"tSNR: 1mm vs 3mm  ({shim_label}, task-{task})\nn={len(common_23)} paired")
-            fig.tight_layout(); fig.savefig(fig_path, dpi=300, bbox_inches="tight"); plt.close(fig)
-            print(f"Saved: {fig_path}", flush=True)
-        except Exception as e:
-            print(f"WARNING: tSNR triplet ({shim_label} task-{task}): {e}", flush=True)
+# --- 7d. tSNR, sSNR, triplet figures ---
+labels = {"tsnr_sc": "tSNR", "ssnr_sc": "sSNR", "snr0_moco": "sSNR", "snr0_moco_mean": "sSNR"}
+for metric in ["tsnr_sc", "ssnr_sc", "snr0_moco", "snr0_moco_mean"]:
+    for task in df_tsnr["task"].unique():
+        df_task = df_tsnr[df_tsnr["task"] == task]
+        for acq1, acq2, acq3, shim_label in SHIM_TRIPLETS:
+            fig_path = os.path.join(output_fig_preprocessing, f"{metric}_{shim_label}_{task}_triplet.png")
+            if os.path.exists(fig_path) and not redo:
+                print(f"Figure already exists: {fig_path}", flush=True)
+                continue
+            d = {a: df_task[df_task["acq"] == a].set_index("subject")[metric] for a in [acq1, acq2, acq3]}
+            common_all = d[acq1].index.intersection(d[acq2].index).intersection(d[acq3].index)
+            common_23  = d[acq2].index.intersection(d[acq3].index)
+            if len(common_23) < 2:
+                print(f"WARNING: Only {len(common_23)} paired for {metric} {shim_label} task-{task}, skipping.", flush=True)
+                continue
+            _, _, pstr23 = wilcoxon_str(d[acq2].loc[common_23].values, d[acq3].loc[common_23].values)
+            try:
+                fig, ax = plt.subplots(figsize=(4, 4.5))
+                _triplet_fig(ax, d, [acq1, acq2, acq3], [0, 1, 2], common_all, common_23, pstr23,
+                             f"Mean {labels[metric]} within SC mask",
+                             f"{labels[metric]}: 1mm vs 3mm  ({shim_label}, task-{task})\nn={len(common_23)} paired")
+                fig.tight_layout(); fig.savefig(fig_path, dpi=300, bbox_inches="tight"); plt.close(fig)
+                print(f"Saved: {fig_path}", flush=True)
+            except Exception as e:
+                print(f"WARNING: {metric} triplet ({shim_label} task-{task}): {e}", flush=True)
 
 # --- 7e. BOLD sensitivity triplet figures ---
 if not bold_df.empty:
@@ -684,7 +820,7 @@ if not bold_df.empty:
                                   ("n_active", f"Suprathreshold voxels (t > {T_THRESHOLD:.3f})", (0, 500))]:
         for task in bold_df["task"].unique():
             bdf_task = bold_df[bold_df["task"] == task]
-            for acq1, acq2, acq3, shim_label in SHIM_TRIPLETS:
+            for acq1, acq2, acq3, shim_label in [("shimSlice+3mm", "shimSlice+1mm+sms2", "shimSlice+1mm+sms2+avg3mm", "shimSlice")]:
                 # Group-level summary of GLM z-maps (peak z / suprathreshold voxel count) --
                 # a second-level result, not preprocessing QC -- see #82.
                 fig_path = os.path.join(output_fig_second_level, f"{metric}_{shim_label}_{task}_triplet.png")
@@ -757,7 +893,7 @@ if not mi_df.empty and (not os.path.exists(fig_path_4) or redo):
                 draw_bracket(ax, bx1, bx2, by, ps, fontsize=8)
         ax.set_xticks(xpos_list); ax.set_xticklabels(label_list, fontsize=8.5)
         ax.set_ylabel("Mutual Information with T2*w GRE\n(native EPI space, within SC mask)", fontsize=9)
-        ax.set_title("MI with T2*w: shimBase vs shimSlice\n(3mm and 1mm acquisitions)", fontsize=9)
+        ax.set_title("MI with T2*w: shimBase vs shimSlice\n(3mm and 1mm acquisitions, REST)", fontsize=9)
         ax.set_xlim(-0.6, 4.1)
         ax.spines["top"].set_visible(False); ax.spines["right"].set_visible(False)
         fig.tight_layout(); fig.savefig(fig_path_4, dpi=300, bbox_inches="tight"); plt.close(fig)
@@ -775,8 +911,10 @@ SNRPLOT_4COND = [
 for snr_metric, col_name, ylabel in [
     ("tSNR", "tsnr_sc", "Mean tSNR within SC mask"),
     ("sSNR", "ssnr_sc", "Mean sSNR within SC mask"),
+    ("sSNR", "snr0_moco", "Mean sSNR after motion correction"),
+    ("sSNR", "snr0_moco_mean", "Mean sSNR after motion correction (mean)"),
 ]:
-    fig_path = os.path.join(output_fig_preprocessing, f"{len(IDs)}_{snr_metric.lower()}_4cond.png")
+    fig_path = os.path.join(output_fig_preprocessing, f"{len(IDs)}_{col_name.lower()}_4cond.png")
     if df_tsnr.empty or col_name not in df_tsnr.columns:
         print(f"INFO: No {col_name} data, skipping {snr_metric} 4-condition plot.", flush=True)
         continue
