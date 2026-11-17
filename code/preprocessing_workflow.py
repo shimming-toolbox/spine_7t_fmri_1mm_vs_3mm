@@ -251,6 +251,18 @@ def epi_avg_slices_moco(ID, source_tag, tag, n_slices_avg, redo, verbose):
 
         outputs.append((moco_mean_f, run_name))
 
+    # Also do it for the moco not mean
+    source_files = sorted(
+        glob.glob(os.path.join(source_moco_dir, f"sub-{ID}_{source_tag}_*bold_moco.nii.gz")))
+    for source_f in source_files:
+        match = re.search(r"_?(run-\d+)", source_f)
+        run_name = match.group(1) if match else ""
+
+        moco_f = os.path.join(moco_dir, os.path.basename(source_f).replace(source_tag, tag))
+        moco_f = utils.average_slices_img(i_img=source_f, o_img=moco_f, n_slices_avg=n_slices_avg, redo=redo, verbose=verbose)
+
+        outputs.append((moco_f, run_name))
+
     print(f'=== Slice averaging (1mm -> {n_slices_avg}x) : Done  {ID} {tag} ===', flush=True)
 
     return outputs
